@@ -2,6 +2,7 @@
 
 # v1.3.11
 * Changed an error message for no Magisk mirrors
+* Stop AOCXD daemon on Tensor devices
 
 # v1.3.10
 * Tuned for POCO F3 (Android 15)
