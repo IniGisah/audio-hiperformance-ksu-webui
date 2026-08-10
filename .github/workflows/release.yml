@@ -1,0 +1,45 @@
+name: Release Module Zip
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Version
+        id: get_version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            PROP_VER=$(grep '^version=' module.prop | cut -d'=' -f2)
+            TAG_NAME="${PROP_VER:-v1.0.0}"
+          fi
+          echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
+          echo "Release Tag: ${TAG_NAME}"
+
+      - name: Package Module Zip
+        run: |
+          ZIP_NAME="audio-misc-settings-ksu-webui.zip"
+          zip -r "$ZIP_NAME" . -x "*.git*" "*.github*" "*.zip"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.TAG_NAME }}
+          files: |
+            audio-misc-settings-ksu-webui.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
