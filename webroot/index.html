@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audio Misc. Settings WebUI</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 10v3" />
+            <path d="M6 6v11" />
+            <path d="M10 3v18" />
+            <path d="M14 8v7" />
+            <path d="M18 5v13" />
+            <path d="M22 10v3" />
+          </svg>
+        </div>
+        <div>
+          <h1>Audio Misc. Settings + WebUI</h1>
+          <p class="subtitle">KernelSU / MetaModule Audio Engine Control Panel</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="badge version-badge">v1.0.0</span>
+        <span id="status-badge" class="badge status-badge loading">Checking...</span>
+      </div>
+    </header>
+
+    <!-- Control Toolbar -->
+    <section class="toolbar-section">
+      <button id="btn-refresh" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        Refresh Status
+      </button>
+      <button id="btn-restart-audio" class="btn btn-accent">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Restart Audioserver
+      </button>
+      <button id="btn-apply-volume" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        Set 100 Volume Steps
+      </button>
+    </section>
+
+    <!-- Metrics Overview Grid -->
+    <main class="dashboard-grid">
+      <!-- Card 1: Live Audio Output & DAC/Bluetooth Session -->
+      <div class="card card-output full-width Highlight-card">
+        <div class="card-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+          <h3>Current Audio Output Session</h3>
+          <span id="output-state-badge" class="badge output-badge">Scanning...</span>
+        </div>
+        <div class="card-body grid-2col">
+          <div class="info-block">
+            <span class="info-label">Active Device Route & Name:</span>
+            <span id="out-device-name" class="info-value highlight-val">Detecting active output...</span>
+          </div>
+          <div class="info-block">
+            <span class="info-label">Current Sample Rate:</span>
+            <span id="out-sample-rate" class="info-value text-mono highlight-val">Detecting sample rate...</span>
+          </div>
+          <div class="info-block">
+            <span class="info-label">Current Audio Bitrate & Format:</span>
+            <span id="out-bitrate" class="info-value text-mono highlight-val">Detecting bitrate...</span>
+          </div>
+          <div class="info-block">
+            <span class="info-label">USB DAC Device & Sync Mode:</span>
+            <span id="out-dac-info" class="info-value text-mono">Scanning USB streams...</span>
+          </div>
+          <div class="info-block">
+            <span class="info-label">Bluetooth Device & Codec:</span>
+            <span id="out-bt-codec" class="info-value text-mono">Checking A2DP state...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: System Audio Properties -->
+      <div class="card card-properties">
+        <div class="card-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="15" x2="23" y2="15"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="15" x2="4" y2="15"/></svg>
+          <h3>Audio System Properties</h3>
+        </div>
+        <div class="card-body">
+          <div class="prop-row">
+            <span class="prop-name">Media Volume Steps</span>
+            <span id="prop-vol-steps" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">Resampler Quality</span>
+            <span id="prop-resampler-quality" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">Effects Framework</span>
+            <span id="prop-effects-status" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">Spatial Audio</span>
+            <span id="prop-spatializer-status" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">Safe Media Bypass</span>
+            <span id="prop-safemedia-status" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">USB Transfer Period</span>
+            <span id="prop-usb-period" class="prop-val">Loading...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Active Audio Session Info -->
+      <div class="card card-session">
+        <div class="card-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          <h3>Active Audio Policy & Session</h3>
+        </div>
+        <div class="card-body">
+          <div class="info-block">
+            <span class="info-label">Active Policy XML:</span>
+            <span id="info-active-policy" class="info-value text-mono">Detecting...</span>
+          </div>
+          <div class="info-block">
+            <span class="info-label">Audioserver Process:</span>
+            <span id="info-audioserver-pid" class="info-value text-mono">Checking...</span>
+          </div>
+          <div class="info-block">
+            <span class="info-label">SoC Platform:</span>
+            <span id="info-platform" class="info-value text-mono">Detecting...</span>
+          </div>
+          <div class="info-block">
+            <span class="info-label">Device Architecture:</span>
+            <span id="info-arch" class="info-value text-mono">Detecting...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 4: Module Files & Replacements Status -->
+      <div class="card card-module">
+        <div class="card-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <h3>Module Files & Nullifications</h3>
+        </div>
+        <div class="card-body">
+          <div class="status-list">
+            <div class="status-item">
+              <span id="indicator-alsa" class="status-indicator active"></span>
+              <span class="status-text">Patched ALSA / Tensor Drivers</span>
+            </div>
+            <div class="status-item">
+              <span id="indicator-soundfx" class="status-indicator active"></span>
+              <span class="status-text">SoundFX Nullified (ZeroMount Overlay)</span>
+            </div>
+            <div class="status-item">
+              <span id="indicator-spatializer" class="status-indicator active"></span>
+              <span class="status-text">Spatializer Disabled</span>
+            </div>
+            <div class="status-item">
+              <span id="indicator-dolby" class="status-indicator active"></span>
+              <span class="status-text">Dolby / Wellbeing Prebuilts Disabled</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 5: Audio Policy & Output Log Console -->
+      <div class="card card-console full-width">
+        <div class="card-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          <h3>Audio Policy / System Console</h3>
+          <div class="console-controls">
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-verbose">
+              <span class="toggle-slider"></span>
+              <span class="toggle-text">Verbose Logs</span>
+            </label>
+            <button id="btn-clear-console" class="btn-sm">Clear</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <pre id="console-output" class="console-box">Initializing Audio Misc Settings WebUI Console...</pre>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Audio Misc. Settings + WebUI &bull; KernelSU Next / MetaModule / ZeroMount Ready</p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,16 +1,25 @@
 #!/system/bin/sh
 
 # Do NOT assume where your module will be located. ALWAYS use $MODDIR if you need to know where this script and module are placed.
-# This will make sure your module will still work if Magisk changes its mount point in the future
 
 MODDIR=${0%/*}
+MODPARENT=${MODDIR%/*}
 
 # This script will be executed in post-fs-data mode
 
-if [ \( -e "${MODDIR%/*/*}/modules/usb-samplerate-unlocker"  -a  ! -e "${MODDIR%/*/*}/modules/usb-samplerate-unlocker/disable" \) \
-        -o  -e "${MODDIR%/*/*}/modules_update/usb-samplerate-unlocker" ] || \
-    [ \( -e "${MODDIR%/*/*}/modules/audio-samplerate-changer"  -a  ! -e "${MODDIR%/*/*}/modules/audio-samplerate-changer/disable" \) \
-        -o  -e "${MODDIR%/*/*}/modules_update/audio-samplerate-changer" ]; then
+is_module_active() {
+    local m="$1"
+    if [ \( -e "${MODPARENT}/${m}" -a ! -e "${MODPARENT}/${m}/disable" \) \
+            -o -e "${MODPARENT}_update/${m}" \
+            -o \( -e "/data/adb/ksu/modules/${m}" -a ! -e "/data/adb/ksu/modules/${m}/disable" \) \
+            -o \( -e "/data/adb/ap/modules/${m}" -a ! -e "/data/adb/ap/modules/${m}/disable" \) \
+            -o \( -e "/data/adb/modules/${m}" -a ! -e "/data/adb/modules/${m}/disable" \) ]; then
+        return 0
+    fi
+    return 1
+}
+
+if is_module_active "usb-samplerate-unlocker" || is_module_active "audio-samplerate-changer"; then
         
     # If usb-samplerate-unlock or audio-samplerate-changer exists, save related libraries and file(s) elsewhere
     # because they will do the same thing in themselves.

@@ -1,19 +1,30 @@
+# Media Volume Steps & Safe Volume Bypass
 ro.config.media_vol_steps=100
 audio.safemedia.bypass=true
 audio.safemedia.force=false
 audio.safemedia.csd.force=false
+
+# Disable DSP Effects & Spatializer for Bit-Perfect Low-Jitter Audio Pass
 ro.audio.ignore_effects=true
 ro.audio.spatializer_enabled=false
 ro.vendor.audio.dolby.dax.support=false
 vendor.audio.dolby.control.support=false
 persist.audio.dolby.enabled=false
+
+# USB DAC Jitter Reduction & HAL Tuning
 vendor.audio.usb.perio=2000
 vendor.audio.usb.out.period_us=2000
 vendor.audio.usb.out.period_count=2
-vendor.audio_hal.period_size=120
-vendor.audio_hal.period_multiplier=1
-vendor.audio.adm.buffering.ms=2
+
+# High-Fidelity Audio Pipeline & 24-bit FLAC Decoding
+persist.vendor.audio.hifi=true
+vendor.audio.flac.sw.decoder.24bit=true
+ro.audio.flinger_standbytime_ms=30000
+
+# Bluetooth HD Bitrate
 persist.bluetooth.sbc_hd_higher_bitrate=1
+
+# Mastering Quality Resampler Settings (AudioFlinger 32-bit Float)
 af.resampler.quality=7
 ro.audio.resampler.psd.enable_at_samplerate=44100
 ro.audio.resampler.psd.stopband=179

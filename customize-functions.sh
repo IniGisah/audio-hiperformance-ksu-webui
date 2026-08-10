@@ -1,16 +1,41 @@
 #!/system/bin/sh
 
-# Check whether Magisk magic mount compatible or not
-function isMagiskMountCompatible()
+# Locate system vendor directory
+function getVendorDir()
 {
-    local tmp="$(magisk --path)"
-    if [ -z "$tmp" ]; then
+    if [ -d "/vendor" ]; then
+        echo "/vendor"
+    elif [ -d "/system/vendor" ]; then
+        echo "/system/vendor"
+    else
         return 1
-    elif [ -d "${tmp}/.magisk/mirror/vendor" ]; then
+    fi
+}
+
+function isMountCompatible()
+{
+    local vdir
+    vdir="$(getVendorDir)"
+    if [ -n "$vdir" -a -d "$vdir" ]; then
         return 0
     else
         return 1
     fi
+}
+
+function isMagiskMountCompatible()
+{
+    isMountCompatible
+}
+
+function find_module()
+{
+    local modname="$1"
+    [ -e "${MODPATH%/*}/${modname}" ] && return 0
+    [ -e "/data/adb/ksu/modules/${modname}" ] && return 0
+    [ -e "/data/adb/ap/modules/${modname}" ] && return 0
+    [ -e "/data/adb/modules/${modname}" ] && return 0
+    return 1
 }
 
 # Get the active audio policy configuration fille from the audioserever
@@ -257,14 +282,18 @@ function patchClearTensorOffloadLock()
 
 function makeLibraries()
 {
-    local MAGISKPATH="$(magisk --path)"
+    local VENDORDIR="$(getVendorDir)"
     local d lname
+    
+    if [ -z "$VENDORDIR" ]; then
+        return 1
+    fi
     
     for d in "lib" "lib64"; do
         for lname in "libalsautils.so" "libalsautilsv2.so" "audio_usb_aoc.so"; do
-            if [ -r "${MAGISKPATH}/.magisk/mirror/vendor/${d}/${lname}" ]; then
+            if [ -r "${VENDORDIR}/${d}/${lname}" ]; then
                 mkdir -p "${MODPATH}/system/vendor/${d}"
-                patchMapProperty "${MAGISKPATH}/.magisk/mirror/vendor/${d}/${lname}" "${MODPATH}/system/vendor/${d}/${lname}"
+                patchMapProperty "${VENDORDIR}/${d}/${lname}" "${MODPATH}/system/vendor/${d}/${lname}"
                 chmod 644 "${MODPATH}/system/vendor/${d}/${lname}"
                 chcon u:object_r:vendor_file:s0 "${MODPATH}/system/vendor/${d}/${lname}"
                 chown root:root "${MODPATH}/system/vendor/${d}/${lname}"
@@ -280,16 +309,49 @@ function makeLibraries()
     
 }
 
-function makeUnlockedLibraries()
+function nullifySoundFx()
 {
-    local MAGISKPATH="$(magisk --path)"
-    local d lname
+    local VENDORDIR="$(getVendorDir)"
+    local d lname modfile
+    
+    if [ -z "$VENDORDIR" ]; then
+        return 1
+    fi
     
     for d in "lib" "lib64"; do
+        for lname in "libvolumelistener.so" "libdlbvol.so"; do
+            if [ -r "${VENDORDIR}/${d}/soundfx/${lname}" ]; then
+                modfile="${MODPATH}/system/vendor/${d}/soundfx/${lname}"
+                mkdir -p "${modfile%/*}"
+                cp /dev/null "$modfile"
+                chmod 644 "$modfile"
+                chcon u:object_r:vendor_file:s0 "$modfile"
+                chown root:root "$modfile"
+                chmod -R a+rX "${modfile%/*}"
+                if [ -z "${REPLACEFILES}" ]; then
+                    REPLACEFILES="/system/vendor/${d}/soundfx/${lname}"
+                else
+                    REPLACEFILES="${REPLACEFILES} /system/vendor/${d}/soundfx/${lname}"
+                fi
+            fi
+        done
+    done
+}
+
+function makeUnlockedLibraries()
+{
+    local VENDORDIR="$(getVendorDir)"
+    local d lname
+    
+    if [ -z "$VENDORDIR" ]; then
+        return 1
+    fi
+
+    for d in "lib" "lib64"; do
         for lname in "libalsautils.so" "libalsautilsv2.so"; do
-            if [ -r "${MAGISKPATH}/.magisk/mirror/vendor/${d}/${lname}" ]; then
+            if [ -r "${VENDORDIR}/${d}/${lname}" ]; then
                 mkdir -p "${MODPATH}/system/vendor/${d}"
-                patchClearLock "${MAGISKPATH}/.magisk/mirror/vendor/${d}/${lname}" "${MODPATH}/system/vendor/${d}/${lname}" "max"
+                patchClearLock "${VENDORDIR}/${d}/${lname}" "${MODPATH}/system/vendor/${d}/${lname}" "max"
                 chmod 644 "${MODPATH}/system/vendor/${d}/${lname}"
                 chcon u:object_r:vendor_file:s0 "${MODPATH}/system/vendor/${d}/${lname}"
                 chown root:root "${MODPATH}/system/vendor/${d}/${lname}"
@@ -302,9 +364,9 @@ function makeUnlockedLibraries()
             fi
         done        
         for lname in "audio_usb_aoc.so"; do
-            if [ -r "${MAGISKPATH}/.magisk/mirror/vendor/${d}/${lname}" ]; then
+            if [ -r "${VENDORDIR}/${d}/${lname}" ]; then
                 mkdir -p "${MODPATH}/system/vendor/${d}"
-                patchClearTensorOffloadLock "${MAGISKPATH}/.magisk/mirror/vendor/${d}/${lname}" "${MODPATH}/system/vendor/${d}/${lname}"
+                patchClearTensorOffloadLock "${VENDORDIR}/${d}/${lname}" "${MODPATH}/system/vendor/${d}/${lname}"
                 chmod 644 "${MODPATH}/system/vendor/${d}/${lname}"
                 chcon u:object_r:vendor_file:s0 "${MODPATH}/system/vendor/${d}/${lname}"
                 chown root:root "${MODPATH}/system/vendor/${d}/${lname}"
@@ -364,7 +426,7 @@ function replaceSystemProps_VHPerf()
 
 function replaceSystemProps_Old()
 {
-    if [ -e "${MODPATH%/*/*}/modules/usb-samplerate-unlocker"  -o  -e "${MODPATH%/*/*}/modules_update/usb-samplerate-unlocker" ]; then
+    if find_module "usb-samplerate-unlocker"; then
         sed -i \
             -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2250/' \
             -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2250/' \
@@ -554,20 +616,15 @@ function deSpatializeAudioPolicyConfig()
     if [ $# -ne 1  -o  -z "$1"  -o  ! -r "$1" ]; then
         return 1
     fi
-    local MAGISKPATH="$(magisk --path)"
     local configXML="$1"
-    
-    # Don't use "$MAGISKPATH/.magisk/mirror/system${configXML}" instead of "$MAGISKPATH/.magisk/mirror${configXML}".
-    # In some cases, the former may link to overlaied "${configXML}" by Magisk itself (not original mirrored "${configXML}").
-    local mirrorConfigXML="$MAGISKPATH/.magisk/mirror${configXML}"
 
-    if [ -n "$configXML"  -a  -r "$mirrorConfigXML" ]; then
-        grep -e "flags[[:space:]]*=[[:space:]]*\"AUDIO_OUTPUT_FLAG_SPATIALIZER\"" "$mirrorConfigXML" >"/dev/null" 2>&1
+    if [ -n "$configXML"  -a  -r "$configXML" ]; then
+        grep -e "flags[[:space:]]*=[[:space:]]*\"AUDIO_OUTPUT_FLAG_SPATIALIZER\"" "$configXML" >"/dev/null" 2>&1
         if [ "$?" -eq 0 ]; then
             local modConfigXML="$MODPATH/system${configXML}"
             mkdir -p "${modConfigXML%/*}"
             touch "$modConfigXML"
-            stopSpatializer "$mirrorConfigXML" "$modConfigXML"
+            stopSpatializer "$configXML" "$modConfigXML"
             chmod 644 "$modConfigXML"
             chcon u:object_r:vendor_configs_file:s0 "$modConfigXML"
             chown root:root "$modConfigXML"
@@ -587,24 +644,27 @@ function disablePrivApps()
         return 1
     fi
 
-    local MAGISKPATH="$(magisk --path)"
-    local dir mdir
+    local dir mdir target_dir
     local PrivApps="$1"
     
     for dir in $PrivApps; do
-        if [ -d "${MAGISKPATH}/.magisk/mirror${dir}" ]; then
-            case "${dir}" in
+        if [ -d "${dir}" ] || [ -d "/system${dir}" ]; then
+            target_dir="${dir}"
+            case "${target_dir}" in
                 /system/* )
-                    dir="${dir#/system}"
+                    target_dir="${target_dir#/system}"
                 ;;
             esac
-            mdir="${MODPATH}/system${dir}"
-            mkdir -p "$mdir"
-            chmod a+rx "$mdir"
+            mdir="${MODPATH}/system${target_dir}"
+            mkdir -p "${mdir%/*}"
+            rm -rf "$mdir" 2>/dev/null
+            mknod "$mdir" c 0 0 2>/dev/null || mkdir -p "$mdir"
+            touch "$mdir/.replace" 2>/dev/null
+            chmod a+rx "$mdir" 2>/dev/null
             if [ -z "$REPLACE" ]; then
-                REPLACE="/system${dir}"
+                REPLACE="/system${target_dir}"
             else
-                REPLACE="${REPLACE} /system${dir}"
+                REPLACE="${REPLACE} /system${target_dir}"
             fi
         fi
     done

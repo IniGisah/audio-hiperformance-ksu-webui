@@ -5,16 +5,16 @@
 
 function which_resetprop_command()
 {
-    type resetprop 1>"/dev/null" 2>&1
-    if [ $? -eq 0 ]; then
+    if type resetprop 1>"/dev/null" 2>&1; then
         echo "resetprop"
+    elif [ -x "/data/adb/ksu/bin/resetprop" ]; then
+        echo "/data/adb/ksu/bin/resetprop"
+    elif [ -x "/data/adb/ap/bin/resetprop" ]; then
+        echo "/data/adb/ap/bin/resetprop"
+    elif type resetprop_phh 1>"/dev/null" 2>&1; then
+        echo "resetprop_phh"
     else
-        type resetprop_phh 1>"/dev/null" 2>&1
-        if [ $? -eq 0 ]; then
-            echo "resetprop_phh"
-        else
-            return 1
-        fi
+        return 1
     fi
     return 0
 }
@@ -48,21 +48,21 @@ function additionalSettings()
     
     # Nullifying the volume listener for no compressing audio (maybe a peak limiter)
     #   for Qcomm devices only?
-    if [ -r "/vendor/lib/soundfx/libvolumelistener.so" ]; then
+    if [ -s "/vendor/lib/soundfx/libvolumelistener.so" ]; then
         mount -o bind "/dev/null" "/vendor/lib/soundfx/libvolumelistener.so"
         force_restart_server=1
     fi
-    if [ -r "/vendor/lib64/soundfx/libvolumelistener.so" ]; then
+    if [ -s "/vendor/lib64/soundfx/libvolumelistener.so" ]; then
         mount -o bind "/dev/null" "/vendor/lib64/soundfx/libvolumelistener.so"
         force_restart_server=1
     fi
 
     #   for Motorola devices only?
-    if [ -r "/vendor/lib/soundfx/libdlbvol.so" ]; then
+    if [ -s "/vendor/lib/soundfx/libdlbvol.so" ]; then
         mount -o bind "/dev/null" "/vendor/lib/soundfx/libdlbvol.so"
         force_restart_server=1
     fi
-    if [ -r "/vendor/lib64/soundfx/libdlbvol.so" ]; then
+    if [ -s "/vendor/lib64/soundfx/libdlbvol.so" ]; then
         mount -o bind "/dev/null" "/vendor/lib64/soundfx/libdlbvol.so"
         force_restart_server=1
     fi

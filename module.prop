@@ -1,6 +1,6 @@
-id=audio-misc-settings
-name=Audio misc. settings
-version=v1.3.11
-versionCode=1311
-author=zyhk
-description=Setting audio misc. configuration values (e.g. 100 volume steps, raising the resampling quality, disabling the effects framework, etc.)
+id=audio-misc-settings-ksu-webui
+name=Audio misc. settings + WebUI
+version=v1.2.0
+versionCode=120
+author=zyhk & Chthome Luii
+description=Audiophile audio tweaks (100 volume steps, resampler quality 7, zero-jitter USB DAC tuning) + Real-Time KernelSU WebUI (Live hardware route, LDAC/aptX/AAC codec, 96kHz sample rate, verbose logs toggle)

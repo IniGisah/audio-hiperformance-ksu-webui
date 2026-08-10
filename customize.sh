@@ -1,24 +1,25 @@
 #!/system/bin/sh
 
-[ -z "$(magisk --path)" ] && alias magisk='ksu-magisk'
-
 . "$MODPATH/customize-functions.sh"
 
-if ! isMagiskMountCompatible; then
+if ! isMountCompatible; then
     abort '  ***
-  Aborted by no magisk-mirrors (even including kernelSUs):
-    Try again after reawaking the mirrors
-        by installing my another magisk/kernelSU module
-        "Compatible Magisk-mirroring" and rebooting
-
+  Aborted: Unable to locate system /vendor partition directory.
+  Ensure MetaModule (OverlayFS / Magic Mount) is properly initialized.
   ***'
 fi
 
 REPLACE=""
 REPLACEFILES=""
 
+# Ensure system directory & marker file exist for ZeroMount VFS auto-loading on boot
+mkdir -p "$MODPATH/system/etc"
+echo "# Audio Misc. Settings ZeroMount Target Marker" > "$MODPATH/system/etc/audio_misc_settings.conf"
+chmod 644 "$MODPATH/system/etc/audio_misc_settings.conf"
+
 # Make patched ALSA utility and Tensor's offload libraries for "ro.audio.usb.period_us"
 makeLibraries
+nullifySoundFx
 
 # Remove post-A13 (especially Tensor's) spatial audio flags in an audio configuration file for avoiding errors
 deSpatializeAudioPolicyConfig "/vendor/etc/bluetooth_audio_policy_configuration_7_0.xml"
