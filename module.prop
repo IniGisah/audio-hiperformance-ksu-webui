@@ -1,6 +1,6 @@
 id=audio-misc-settings-ksu-webui
 name=Audio misc. settings + WebUI
-version=v1.2.0
-versionCode=120
+version=v1.3.0
+versionCode=130
 author=zyhk & Chthome Luii
-description=Audiophile audio tweaks (100 volume steps, resampler quality 7, zero-jitter USB DAC tuning) + Real-Time KernelSU WebUI (Live hardware route, LDAC/aptX/AAC codec, 96kHz sample rate, verbose logs toggle)
+description=Audiophile audio tweaks (100 volume steps, resampler quality 7, zero-jitter USB DAC, 2ms ADM buffer, deep buffer bypass) + Real-Time KernelSU WebUI (Dynamic Audiophile vs Power Saver Profile Switcher, ALSA tinymix hardware gain, LDAC/aptX/AAC codec status)

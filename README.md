@@ -80,6 +80,13 @@ Access the built-in control panel directly from **KernelSU Manager**, **ZeroMoun
 
 ---
 
+## 🙏 Credits & Acknowledgments
+
+- **Original Author**: Special thanks to **[zyhk / yzyhk904](https://github.com/yzyhk904)** for creating the original **Audio Misc. Settings** Magisk module, foundational AudioFlinger resampler tuning, and hardware period buffer optimizations.
+- **KernelSU & WebUI Integration**: Enhanced, modernized, and expanded by **[Chthome Luii / IniGisah](https://github.com/IniGisah)** with KernelSU WebUI integration, dynamic audio profile switching, ALSA hardware controls, and banking app compatibility.
+
+---
+
 ## 📄 License & Disclaimer
 
 Provided as-is for audiophiles and music lovers. Flash at your own choice.
