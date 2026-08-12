@@ -77,10 +77,19 @@ Access the built-in control panel directly from **KernelSU Manager**, **KernelSU
 
 ---
 
-## 📸 Screnshots
+## 📸 Screenshots
 
-![Screnshot 1](assets/status.jpg)
-![Screnshot 2](assets/log.jpg)
+<p align="center">
+  <a href="assets/status.jpg">
+    <img src="assets/status.jpg" width="48%" alt="KernelSU WebUI - Status & Profile Switcher" />
+  </a>
+  <a href="assets/log.jpg">
+    <img src="assets/log.jpg" width="48%" alt="KernelSU WebUI - Verbose Execution Logs" />
+  </a>
+</p>
+<p align="center">
+  <sub><i>Tap or click any screenshot to view in full resolution</i></sub>
+</p>
 
 ---
 
