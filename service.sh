@@ -82,7 +82,7 @@ function additionalSettings()
     fi
 
         
-    if [ "$force_restart_server" = "1"  -o  "`getprop ro.system.build.version.release`" -ge "12" ]; then
+    if [ "$force_restart_server" = "1" ]; then
         if [ -n "`getprop init.svc.audioserver`" ]; then
             setprop ctl.restart audioserver
             sleep 1.2
@@ -94,9 +94,16 @@ function additionalSettings()
                 fi
             fi
         fi
-        
     fi
+
     settings put system volume_steps_music 100
+
+    MODDIR="${0%/*}"
+    if [ -f "$MODDIR/set_audio_mode.sh" ]; then
+        sh "$MODDIR/set_audio_mode.sh" apply >/dev/null 2>&1
+    fi
 }
 
 (((sleep 31; additionalSettings)  0<&- &>"/dev/null" &) &)
+
+

@@ -12,17 +12,24 @@ fi
 REPLACE=""
 REPLACEFILES=""
 
-# Ensure system directory & marker file exist for ZeroMount VFS auto-loading on boot
+# Ensure system directory, marker file, and mode.conf exist
 mkdir -p "$MODPATH/system/etc"
 echo "# Audio Misc. Settings ZeroMount Target Marker" > "$MODPATH/system/etc/audio_misc_settings.conf"
 chmod 644 "$MODPATH/system/etc/audio_misc_settings.conf"
+
+if [ ! -f "$MODPATH/mode.conf" ]; then
+    echo "MODE=audiophile" > "$MODPATH/mode.conf"
+fi
+chmod 644 "$MODPATH/mode.conf"
 
 # Make patched ALSA utility and Tensor's offload libraries for "ro.audio.usb.period_us"
 makeLibraries
 nullifySoundFx
 
-# Remove post-A13 (especially Tensor's) spatial audio flags in an audio configuration file for avoiding errors
+# Remove spatial audio flags, disable DRC, and inject bit-perfect profiles
 deSpatializeAudioPolicyConfig "/vendor/etc/bluetooth_audio_policy_configuration_7_0.xml"
+disableDrcAudioPolicyConfig "/vendor/etc/audio_policy_configuration.xml"
+patchBitPerfectAudioPolicyConfig "/vendor/etc/usb_audio_policy_configuration.xml"
 
 # Disable pre-installed Moto Dolby faetures and Wellbeing for reducing very large jitter caused by them
 #   Excluded "MotorolaSettingsProvider" on Motorala devices only for avoiding their bootloop

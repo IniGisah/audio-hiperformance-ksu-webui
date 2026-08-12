@@ -190,6 +190,40 @@ async function loadAudioOutputSession() {
       document.getElementById('prop-safemedia-status').textContent = (data.safemedia === 'true') ? 'Bypassed' : 'Default';
       document.getElementById('prop-usb-period').textContent = (data.usb_period || '2000') + ' μs';
 
+      // Audiophile & Mode Specific Props
+      const modeVal = data.mode || 'audiophile';
+      const isAudiophile = modeVal === 'audiophile';
+      
+      const badgeMode = document.getElementById('active-mode-badge');
+      if (badgeMode) {
+        badgeMode.textContent = isAudiophile ? 'Audiophile Hi-Fi Mode' : 'Power Saver Mode';
+        badgeMode.className = `badge mode-badge ${isAudiophile ? 'audiophile' : 'powersaver'}`;
+      }
+
+      const btnAudiophile = document.getElementById('btn-mode-audiophile');
+      const btnPowerSaver = document.getElementById('btn-mode-power-saver');
+      if (btnAudiophile && btnPowerSaver) {
+        if (isAudiophile) {
+          btnAudiophile.classList.add('active');
+          btnPowerSaver.classList.remove('active');
+        } else {
+          btnPowerSaver.classList.add('active');
+          btnAudiophile.classList.remove('active');
+        }
+      }
+
+      const propIntCodec = document.getElementById('prop-int-codec');
+      if (propIntCodec) propIntCodec.textContent = (data.int_codec === 'true') ? 'Enabled (Direct Pipeline)' : 'Standard';
+
+      const propAdmBuffering = document.getElementById('prop-adm-buffering');
+      if (propAdmBuffering) propAdmBuffering.textContent = (data.adm_buffering || '6') + ' ms (Low-Jitter Bounds)';
+
+      const propDeepBuffer = document.getElementById('prop-deep-buffer');
+      if (propDeepBuffer) propDeepBuffer.textContent = (data.deep_buffer === 'false') ? 'Disabled (Bypassed)' : 'Enabled (Power Saving)';
+
+      const propTinymix = document.getElementById('prop-tinymix-status');
+      if (propTinymix) propTinymix.textContent = data.has_tinymix ? (isAudiophile ? 'LOHIFI Bias (Active)' : 'ULP Power Mode') : 'Not Available';
+
       document.getElementById('info-platform').textContent = data.platform || 'Android Platform';
       document.getElementById('info-arch').textContent = data.arch || 'arm64-v8a';
       document.getElementById('info-audioserver-pid').textContent = data.audioserver_pid ? `PID ${data.audioserver_pid}` : 'running';
@@ -199,7 +233,7 @@ async function loadAudioOutputSession() {
         stateBadge.textContent = data.is_usb ? 'USB Route Active' : (data.is_bt ? 'Bluetooth Active' : 'Speaker Active');
       }
 
-      logToConsole(`[SUCCESS] Route=[${data.active_route}] | SampleRate=[${data.sample_rate}] | DAC=[${data.dac_name || 'USB DAC'}]`);
+      logToConsole(`[SUCCESS] Profile=[${modeVal}] | Route=[${data.active_route}] | SampleRate=[${data.sample_rate}] | DAC=[${data.dac_name || 'USB DAC'}]`);
       return;
     } catch (e) {
       logToConsole(`[JSON PARSE ERR] ${e.message}`);
@@ -228,6 +262,38 @@ async function refreshAll() {
     await Promise.all([updateModuleStatus(), loadAudioOutputSession()]);
   } finally {
     setCardsLoading(false);
+  }
+}
+
+async function switchAudioMode(targetMode) {
+  const isAudiophile = targetMode === 'audiophile';
+  const btnId = isAudiophile ? 'btn-mode-audiophile' : 'btn-mode-power-saver';
+  logToConsole(`Switching audio profile to: ${targetMode}...`);
+  setButtonLoading(btnId, true, 'Applying Profile...');
+
+  const commands = [
+    `/system/bin/sh /data/adb/modules/audio-misc-settings-ksu-webui/set_audio_mode.sh ${targetMode}`,
+    `sh /data/adb/modules/audio-misc-settings-ksu-webui/set_audio_mode.sh ${targetMode}`,
+    `/system/bin/sh /data/adb/modules/audio-misc-settings/set_audio_mode.sh ${targetMode}`
+  ];
+
+  try {
+    let success = false;
+    for (const cmd of commands) {
+      const res = await execCmdWithTimeout(cmd, 4000);
+      if (res && (res.includes('success') || res.includes('Switched'))) {
+        success = true;
+        logToConsole(`Audio mode switch response: ${res}`);
+        break;
+      }
+    }
+    if (!success) {
+      await execCmdVerbose(`/system/bin/sh /data/adb/modules/audio-misc-settings-ksu-webui/set_audio_mode.sh ${targetMode}`);
+    }
+    await new Promise(r => setTimeout(r, 1200));
+    await refreshAll();
+  } finally {
+    setButtonLoading(btnId, false);
   }
 }
 
@@ -280,6 +346,31 @@ document.addEventListener('DOMContentLoaded', () => {
       setButtonLoading('btn-apply-volume', false);
     }
   });
+
+  const btnTinymix = document.getElementById('btn-tinymix-hw');
+  if (btnTinymix) {
+    btnTinymix.addEventListener('click', async () => {
+      logToConsole('Executing ALSA tinymix hardware gain calibration...');
+      setButtonLoading('btn-tinymix-hw', true, 'Applying...');
+      try {
+        await execCmdVerbose('/system/bin/sh /data/adb/modules/audio-misc-settings-ksu-webui/set_audio_mode.sh tinymix_only');
+        logToConsole('ALSA hardware gain applied successfully.');
+        await refreshAll();
+      } finally {
+        setButtonLoading('btn-tinymix-hw', false);
+      }
+    });
+  }
+
+  const btnAudiophile = document.getElementById('btn-mode-audiophile');
+  if (btnAudiophile) {
+    btnAudiophile.addEventListener('click', () => switchAudioMode('audiophile'));
+  }
+
+  const btnPowerSaver = document.getElementById('btn-mode-power-saver');
+  if (btnPowerSaver) {
+    btnPowerSaver.addEventListener('click', () => switchAudioMode('power_saver'));
+  }
 
   document.getElementById('btn-clear-console').addEventListener('click', () => {
     document.getElementById('console-output').textContent = 'Console cleared.';

@@ -409,19 +409,6 @@ function replaceSystemProps_VHPerf()
         -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
         -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
             "$MODPATH/system.prop-workaround"
-   
-    sed -i \
-        -e 's/ro\.audio\.resampler\.psd\.enable_at_samplerate=.*$/ro\.audio\.resampler\.psd\.enable_at_samplerate=44100/' \
-        -e 's/ro\.audio\.resampler\.psd\.stopband=.*$/ro\.audio\.resampler\.psd\.stopband=194/' \
-        -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=520/' \
-        -e 's/ro\.audio\.resampler\.psd\.tbwcheat=.*$/ro\.audio\.resampler\.psd\.tbwcheat=98/' \
-            "$MODPATH/system.prop"
-    sed -i \
-        -e 's/ro\.audio\.resampler\.psd\.enable_at_samplerate=.*$/ro\.audio\.resampler\.psd\.enable_at_samplerate=44100/' \
-        -e 's/ro\.audio\.resampler\.psd\.stopband=.*$/ro\.audio\.resampler\.psd\.stopband=194/' \
-        -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=520/' \
-        -e 's/ro\.audio\.resampler\.psd\.tbwcheat=.*$/ro\.audio\.resampler\.psd\.tbwcheat=98/' \
-            "$MODPATH/system.prop-workaround"
 }
 
 function replaceSystemProps_Old()
@@ -450,16 +437,6 @@ function replaceSystemProps_Old()
     
     fi
     
-    sed -i \
-        -e 's/ro\.audio\.resampler\.psd\.enable_at_samplerate=.*$/ro\.audio\.resampler\.psd\.enable_at_samplerate=48000/' \
-        -e 's/ro\.audio\.resampler\.psd\.stopband=.*$/ro\.audio\.resampler\.psd\.stopband=165/' \
-        -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=360/' \
-        -e 's/ro\.audio\.resampler\.psd\.tbwcheat=.*$/ro\.audio\.resampler\.psd\.tbwcheat=104/' \
-            "$MODPATH/system.prop"
-    sed -i \
-        -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=320/' \
-            "$MODPATH/system.prop-workaround"
-
 }
 
 function replaceSystemProps_S4()
@@ -488,15 +465,6 @@ function replaceSystemProps_S4()
 
     fi
     
-    sed -i \
-        -e 's/ro\.audio\.resampler\.psd\.enable_at_samplerate=.*$/ro\.audio\.resampler\.psd\.enable_at_samplerate=48000/' \
-        -e 's/ro\.audio\.resampler\.psd\.stopband=.*$/ro\.audio\.resampler\.psd\.stopband=165/' \
-        -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=360/' \
-        -e 's/ro\.audio\.resampler\.psd\.tbwcheat=.*$/ro\.audio\.resampler\.psd\.tbwcheat=104/' \
-            "$MODPATH/system.prop"
-    sed -i \
-        -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=320/' \
-            "$MODPATH/system.prop-workaround"
 }
 
 function replaceSystemProps_Kona()
@@ -552,12 +520,6 @@ function replaceSystemProps_Tensor()
         -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
             "$MODPATH/system.prop-workaround"
             
-    sed -i \
-        -e 's/ro\.audio\.resampler\.psd\.enable_at_samplerate=.*$/ro\.audio\.resampler\.psd\.enable_at_samplerate=48000/' \
-        -e 's/ro\.audio\.resampler\.psd\.stopband=.*$/ro\.audio\.resampler\.psd\.stopband=194/' \
-        -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=520/' \
-        -e 's/ro\.audio\.resampler\.psd\.tbwcheat=.*$/ro\.audio\.resampler\.psd\.tbwcheat=83/' \
-            "$MODPATH/system.prop"
 }
 
 function replaceSystemProps_Others()
@@ -677,3 +639,54 @@ function ui_print_replacelist()
         ui_print "- Replace target file: $f"
     done
 }
+
+function disableDrcAudioPolicyConfig()
+{
+    if [ $# -ne 1  -o  -z "$1"  -o  ! -r "$1" ]; then
+        return 1
+    fi
+    local configXML="$1"
+
+    if [ -n "$configXML"  -a  -r "$configXML" ]; then
+        local modConfigXML="$MODPATH/system${configXML}"
+        mkdir -p "${modConfigXML%/*}"
+        cp -f "$configXML" "$modConfigXML"
+        sed -i 's/speaker_drc_enabled[[:space:]]*=[[:space:]]*"true"/speaker_drc_enabled="false"/g' "$modConfigXML"
+        chmod 644 "$modConfigXML"
+        chcon u:object_r:vendor_configs_file:s0 "$modConfigXML"
+        chown root:root "$modConfigXML"
+        chmod -R a+rX "${modConfigXML%/*}"
+        if [ -z "$REPLACEFILES" ]; then
+            REPLACEFILES="/system${configXML}"
+        else
+            REPLACEFILES="$REPLACEFILES /system${configXML}"
+        fi
+    fi
+}
+
+function patchBitPerfectAudioPolicyConfig()
+{
+    if [ $# -ne 1  -o  -z "$1"  -o  ! -r "$1" ]; then
+        return 1
+    fi
+    local configXML="$1"
+
+    if [ -n "$configXML"  -a  -r "$configXML" ]; then
+        local modConfigXML="$MODPATH/system${configXML}"
+        mkdir -p "${modConfigXML%/*}"
+        cp -f "$configXML" "$modConfigXML"
+        if grep -q "AUDIO_OUTPUT_FLAG_DIRECT" "$modConfigXML" && ! grep -q "AUDIO_OUTPUT_FLAG_BIT_PERFECT" "$modConfigXML"; then
+            sed -i 's/AUDIO_OUTPUT_FLAG_DIRECT/AUDIO_OUTPUT_FLAG_DIRECT|AUDIO_OUTPUT_FLAG_BIT_PERFECT/g' "$modConfigXML"
+        fi
+        chmod 644 "$modConfigXML"
+        chcon u:object_r:vendor_configs_file:s0 "$modConfigXML"
+        chown root:root "$modConfigXML"
+        chmod -R a+rX "${modConfigXML%/*}"
+        if [ -z "$REPLACEFILES" ]; then
+            REPLACEFILES="/system${configXML}"
+        else
+            REPLACEFILES="$REPLACEFILES /system${configXML}"
+        fi
+    fi
+}
+

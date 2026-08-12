@@ -16,17 +16,15 @@ vendor.audio.usb.perio=2000
 vendor.audio.usb.out.period_us=2000
 vendor.audio.usb.out.period_count=2
 
-# High-Fidelity Audio Pipeline & 24-bit FLAC Decoding
+# High-Fidelity Audio Pipeline & Hardware HiFi Acceleration
 persist.vendor.audio.hifi=true
+persist.vendor.audio.hifi.int_codec=true
+vendor.audio.adm.buffering.ms=6
+audio.deep_buffer.media=false
 vendor.audio.flac.sw.decoder.24bit=true
-ro.audio.flinger_standbytime_ms=30000
+
 
 # Bluetooth HD Bitrate
 persist.bluetooth.sbc_hd_higher_bitrate=1
 
-# Mastering Quality Resampler Settings (AudioFlinger 32-bit Float)
-af.resampler.quality=7
-ro.audio.resampler.psd.enable_at_samplerate=44100
-ro.audio.resampler.psd.stopband=179
-ro.audio.resampler.psd.halflength=408
-ro.audio.resampler.psd.tbwcheat=99
+

@@ -208,7 +208,7 @@ vol_steps="$(getprop ro.config.media_vol_steps)"
 if [ -z "$vol_steps" ]; then vol_steps="100"; fi
 
 resampler="$(getprop af.resampler.quality)"
-if [ -z "$resampler" ]; then resampler="7"; fi
+if [ -z "$resampler" ]; then resampler="Default (Dynamic Hi-Fi)"; fi
 
 ignore_fx="$(getprop ro.audio.ignore_effects)"
 spatializer="$(getprop ro.audio.spatializer_enabled)"
@@ -218,6 +218,31 @@ platform="$(getprop ro.board.platform)"
 arch="$(getprop ro.product.cpu.abi)"
 audioserver_pid="$(getprop init.svc_debug_pid.audioserver)"
 
+# Audiophile & Dynamic Mode Properties
+script_dir="${0%/*}"
+mode_val="audiophile"
+for p in "$script_dir/mode.conf" \
+         "/data/adb/modules/audio-misc-settings-ksu-webui/mode.conf" \
+         "/data/adb/modules/audio-misc-settings/mode.conf"; do
+    if [ -r "$p" ]; then
+        mode_val="$(grep '^MODE=' "$p" | cut -d= -f2 | tr -d ' \r')"
+        break
+    fi
+done
+if [ -z "$mode_val" ]; then mode_val="audiophile"; fi
+
+int_codec="$(getprop persist.vendor.audio.hifi.int_codec)"
+if [ -z "$int_codec" ]; then int_codec="true"; fi
+
+adm_buffering="$(getprop vendor.audio.adm.buffering.ms)"
+if [ -z "$adm_buffering" ]; then adm_buffering="6"; fi
+
+deep_buffer="$(getprop audio.deep_buffer.media)"
+if [ -z "$deep_buffer" ]; then deep_buffer="false"; fi
+
+has_tinymix=0
+if type tinymix >/dev/null 2>&1; then has_tinymix=1; fi
+
 # Sanitize string variables for clean JSON output
 dac_name="$(echo "$dac_name" | tr -d '"\\\r\n' | xargs 2>/dev/null || echo "$dac_name" | tr -d '"\\\r\n')"
 active_route="$(echo "$active_route" | tr -d '"\\\r\n' | xargs 2>/dev/null || echo "$active_route" | tr -d '"\\\r\n')"
@@ -225,8 +250,9 @@ sample_rate_str="$(echo "$sample_rate_str" | tr -d '"\\\r\n' | xargs 2>/dev/null
 bitrate_str="$(echo "$bitrate_str" | tr -d '"\\\r\n' | xargs 2>/dev/null || echo "$bitrate_str" | tr -d '"\\\r\n')"
 bt_name="$(echo "$bt_name" | tr -d '"\\\r\n' | xargs 2>/dev/null || echo "$bt_name" | tr -d '"\\\r\n')"
 bt_codec="$(echo "$bt_codec" | tr -d '"\\\r\n' | xargs 2>/dev/null || echo "$bt_codec" | tr -d '"\\\r\n')"
+mode_val="$(echo "$mode_val" | tr -d '"\\\r\n' | xargs 2>/dev/null || echo "$mode_val" | tr -d '"\\\r\n')"
 
-printf '{"is_usb":%s,"is_bt":%s,"dac_name":"%s","sync_mode":"%s","bt_name":"%s","bt_codec":"%s","active_route":"%s","sample_rate":"%s","bitrate":"%s","vol_steps":"%s","resampler":"%s","ignore_fx":"%s","spatializer":"%s","safemedia":"%s","usb_period":"%s","platform":"%s","arch":"%s","audioserver_pid":"%s"}\n' \
+printf '{"is_usb":%s,"is_bt":%s,"dac_name":"%s","sync_mode":"%s","bt_name":"%s","bt_codec":"%s","active_route":"%s","sample_rate":"%s","bitrate":"%s","vol_steps":"%s","resampler":"%s","ignore_fx":"%s","spatializer":"%s","safemedia":"%s","usb_period":"%s","platform":"%s","arch":"%s","audioserver_pid":"%s","mode":"%s","int_codec":"%s","adm_buffering":"%s","deep_buffer":"%s","has_tinymix":%s}\n' \
   "$is_usb" \
   "$is_bt" \
   "$dac_name" \
@@ -244,4 +270,11 @@ printf '{"is_usb":%s,"is_bt":%s,"dac_name":"%s","sync_mode":"%s","bt_name":"%s",
   "$usb_period" \
   "$platform" \
   "$arch" \
-  "$audioserver_pid"
+  "$audioserver_pid" \
+  "$mode_val" \
+  "$int_codec" \
+  "$adm_buffering" \
+  "$deep_buffer" \
+  "$has_tinymix"
+
+
