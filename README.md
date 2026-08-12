@@ -77,6 +77,13 @@ Access the built-in control panel directly from **KernelSU Manager**, **KernelSU
 
 ---
 
+## 📸 Screnshots
+
+![Screnshot 1](assets/status.jpg)
+![Screnshot 2](assets/log.jpg)
+
+---
+
 ## 🔧 Installation & Safe Mode Recovery
 
 1. **Installation**:
