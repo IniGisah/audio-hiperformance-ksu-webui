@@ -22,58 +22,42 @@ function which_resetprop_command()
 function additionalSettings()
 {
     local force_restart_server=0
-    
+    local resetprop_command="`which_resetprop_command`"
+    local d lname
+
+    # Re-enforce audio effects bypass if PHH toggle is set
     if [ "`getprop persist.sys.phh.disable_audio_effects`" = "0" ]; then
-        resetprop_command="`which_resetprop_command`"
         if [ -n "$resetprop_command" ]; then
-            # Workaround for recent Pixel Firmwares (not to reboot when resetprop'ing)
             "$resetprop_command" --delete ro.audio.ignore_effects 1>"/dev/null" 2>&1
-            # End of workaround
             "$resetprop_command" ro.audio.ignore_effects true
             force_restart_server=1
         else
             return 1
         fi
     fi
-    
+
     # Stop Tensor device's AOC daemons for reducing significant jitter
-    if [ "`getprop init.svc.aocd`" = "running" ]; then
-        setprop ctl.stop aocd
-        force_restart_server=1
-    fi
-    if [ "`getprop init.svc.aocxd`" = "running" ]; then
-        setprop ctl.stop aocxd
-        force_restart_server=1
-    fi
-    
-    # Nullifying the volume listener for no compressing audio (maybe a peak limiter)
-    #   for Qcomm devices only?
-    if [ -s "/vendor/lib/soundfx/libvolumelistener.so" ]; then
-        mount -o bind "/dev/null" "/vendor/lib/soundfx/libvolumelistener.so"
-        force_restart_server=1
-    fi
-    if [ -s "/vendor/lib64/soundfx/libvolumelistener.so" ]; then
-        mount -o bind "/dev/null" "/vendor/lib64/soundfx/libvolumelistener.so"
-        force_restart_server=1
-    fi
+    for svc in aocd aocxd; do
+        if [ "`getprop init.svc.${svc}`" = "running" ]; then
+            setprop ctl.stop "$svc"
+            force_restart_server=1
+        fi
+    done
 
-    #   for Motorola devices only?
-    if [ -s "/vendor/lib/soundfx/libdlbvol.so" ]; then
-        mount -o bind "/dev/null" "/vendor/lib/soundfx/libdlbvol.so"
-        force_restart_server=1
-    fi
-    if [ -s "/vendor/lib64/soundfx/libdlbvol.so" ]; then
-        mount -o bind "/dev/null" "/vendor/lib64/soundfx/libdlbvol.so"
-        force_restart_server=1
-    fi
+    # Nullify volume listeners / Dolby volume compressors via bind-mount
+    for d in "lib" "lib64"; do
+        for lname in "libvolumelistener.so" "libdlbvol.so"; do
+            if [ -s "/vendor/${d}/soundfx/${lname}" ]; then
+                mount -o bind "/dev/null" "/vendor/${d}/soundfx/${lname}"
+                force_restart_server=1
+            fi
+        done
+    done
 
-    # Force disabling spatializer if OS reverted the spatializer setting during the booting process
+    # Force disabling spatializer if OS reverted the setting during boot
     if [ "`getprop ro.audio.spatializer_enabled`" = "true" ]; then
-        resetprop_command="`which_resetprop_command`"
         if [ -n "$resetprop_command" ]; then
-            # Workaround for recent Pixel Firmwares (not to reboot when resetprop'ing)
             "$resetprop_command" --delete ro.audio.spatializer_enabled 1>"/dev/null" 2>&1
-            # End of workaround
             "$resetprop_command" ro.audio.spatializer_enabled false
             force_restart_server=1
         else
@@ -81,13 +65,11 @@ function additionalSettings()
         fi
     fi
 
-        
     if [ "$force_restart_server" = "1" ]; then
         if [ -n "`getprop init.svc.audioserver`" ]; then
             setprop ctl.restart audioserver
             sleep 1.2
             if [ "`getprop init.svc.audioserver`" != "running" ]; then
-                # workaround for Android 12 old devices hanging up the audioserver after "setprop ctl.restart audioserver" is executed
                 local pid="`getprop init.svc_debug_pid.audioserver`"
                 if [ -n "$pid" ]; then
                     kill -HUP $pid 1>"/dev/null" 2>&1

@@ -25,12 +25,15 @@ fi
 
 # 2. Accurate Bluetooth Audio Connection Detection
 is_bt=0
-bt_dump="$(timeout 1 dumpsys bluetooth_manager 2>/dev/null | tr -d '\r')"
-if [ -n "$bt_dump" ]; then
-    bt_a2dp_active="$(echo "$bt_dump" | grep -A 2 "Profile: A2dpService" | grep "mActiveDevice:" | grep -v "null")"
-    bt_peer_active="$(echo "$bt_dump" | grep -A 2 "A2DP Peers State:" | grep -i "active peer:" | grep -v "null")"
-    if [ -n "$bt_a2dp_active" ] || [ -n "$bt_peer_active" ]; then
-        is_bt=1
+bt_dump=""
+if [ -n "$(getprop bluetooth.profile.a2dp.source.enabled)" ] || [ -n "$(getprop init.svc.bluetooth)" ]; then
+    bt_dump="$(timeout 1 dumpsys bluetooth_manager 2>/dev/null | tr -d '\r')"
+    if [ -n "$bt_dump" ]; then
+        bt_a2dp_active="$(echo "$bt_dump" | grep -A 2 "Profile: A2dpService" | grep "mActiveDevice:" | grep -v "null")"
+        bt_peer_active="$(echo "$bt_dump" | grep -A 2 "A2DP Peers State:" | grep -i "active peer:" | grep -v "null")"
+        if [ -n "$bt_a2dp_active" ] || [ -n "$bt_peer_active" ]; then
+            is_bt=1
+        fi
     fi
 fi
 
@@ -210,6 +213,15 @@ if [ -z "$vol_steps" ]; then vol_steps="100"; fi
 resampler="$(getprop af.resampler.quality)"
 if [ -z "$resampler" ]; then resampler="Default (Dynamic Hi-Fi)"; fi
 
+offload_24bit="$(getprop audio.offload.pcm.24bit.enable)"
+if [ -z "$offload_24bit" ]; then offload_24bit="false"; fi
+
+flinger_standby="$(getprop ro.audio.flinger_standbytime_ms)"
+if [ -z "$flinger_standby" ]; then flinger_standby="default"; fi
+
+psd_stopband="$(getprop ro.audio.resampler.psd.stopband)"
+if [ -z "$psd_stopband" ]; then psd_stopband="default"; fi
+
 ignore_fx="$(getprop ro.audio.ignore_effects)"
 spatializer="$(getprop ro.audio.spatializer_enabled)"
 safemedia="$(getprop audio.safemedia.bypass)"
@@ -252,7 +264,7 @@ bt_name="$(echo "$bt_name" | tr -d '"\\\r\n' | xargs 2>/dev/null || echo "$bt_na
 bt_codec="$(echo "$bt_codec" | tr -d '"\\\r\n' | xargs 2>/dev/null || echo "$bt_codec" | tr -d '"\\\r\n')"
 mode_val="$(echo "$mode_val" | tr -d '"\\\r\n' | xargs 2>/dev/null || echo "$mode_val" | tr -d '"\\\r\n')"
 
-printf '{"is_usb":%s,"is_bt":%s,"dac_name":"%s","sync_mode":"%s","bt_name":"%s","bt_codec":"%s","active_route":"%s","sample_rate":"%s","bitrate":"%s","vol_steps":"%s","resampler":"%s","ignore_fx":"%s","spatializer":"%s","safemedia":"%s","usb_period":"%s","platform":"%s","arch":"%s","audioserver_pid":"%s","mode":"%s","int_codec":"%s","adm_buffering":"%s","deep_buffer":"%s","has_tinymix":%s}\n' \
+printf '{"is_usb":%s,"is_bt":%s,"dac_name":"%s","sync_mode":"%s","bt_name":"%s","bt_codec":"%s","active_route":"%s","sample_rate":"%s","bitrate":"%s","vol_steps":"%s","resampler":"%s","ignore_fx":"%s","spatializer":"%s","safemedia":"%s","usb_period":"%s","platform":"%s","arch":"%s","audioserver_pid":"%s","mode":"%s","int_codec":"%s","adm_buffering":"%s","deep_buffer":"%s","has_tinymix":%s,"offload_24bit":"%s","flinger_standby":"%s","psd_stopband":"%s"}\n' \
   "$is_usb" \
   "$is_bt" \
   "$dac_name" \
@@ -275,6 +287,8 @@ printf '{"is_usb":%s,"is_bt":%s,"dac_name":"%s","sync_mode":"%s","bt_name":"%s",
   "$int_codec" \
   "$adm_buffering" \
   "$deep_buffer" \
-  "$has_tinymix"
-
+  "$has_tinymix" \
+  "$offload_24bit" \
+  "$flinger_standby" \
+  "$psd_stopband"
 

@@ -66,7 +66,7 @@
         </div>
         <div class="card-body profile-body">
           <div class="profile-desc">
-            <p>Switch dynamically between <strong>Audiophile Hi-Fi Mode</strong> (ultra-low latency, zero-jitter, 2ms ADM buffer, deep buffer bypass, LOHIFI headphone bias) and <strong>Power Saver Mode</strong> (re-enables deep buffer for 200ms CPU sleep cycles between audio bursts for maximum battery life).</p>
+            <p>Switch dynamically between <strong>Audiophile Hi-Fi Mode</strong> (mastering-grade PSD resampler, 179 dB stop-band attenuation, 24-bit offload, zero-jitter ADM buffer, deep buffer bypass, LOHIFI headphone bias) and <strong>Power Saver Mode</strong> (re-enables deep buffer for 200ms CPU sleep cycles, mid-grade resampler, quick hardware standby for maximum battery life).</p>
           </div>
           <div class="profile-actions">
             <button id="btn-mode-audiophile" class="btn btn-mode btn-mode-audiophile active">
@@ -155,6 +155,18 @@
             <span class="prop-name">USB Transfer Period</span>
             <span id="prop-usb-period" class="prop-val">Loading...</span>
           </div>
+          <div class="prop-row">
+            <span class="prop-name">24-bit PCM Offload</span>
+            <span id="prop-offload-24bit" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">PSD Resampler Stopband</span>
+            <span id="prop-psd-stopband" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">AudioFlinger Standby</span>
+            <span id="prop-flinger-standby" class="prop-val">Loading...</span>
+          </div>
         </div>
       </div>
 
@@ -241,6 +253,8 @@
       <p>Audio Misc. Settings + WebUI &bull; KernelSU Next / MetaModule / ZeroMount Ready</p>
     </footer>
   </div>
+
+  <div id="toast-container" class="toast-container"></div>
 
   <script src="script.js"></script>
 </body>
