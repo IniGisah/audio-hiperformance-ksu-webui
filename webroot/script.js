@@ -11,6 +11,102 @@ function logToConsole(msg, isVerboseOnly = false) {
   }
 }
 
+// ═══════════════════════════════════════════
+// Toast Notification System
+// ═══════════════════════════════════════════
+
+const TOAST_ICONS = {
+  success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+  warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+};
+
+function showToast(message, type = 'info', durationMs = 3000) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.style.setProperty('--toast-duration', `${durationMs}ms`);
+  toast.innerHTML = `
+    <span class="toast-icon">${TOAST_ICONS[type] || TOAST_ICONS.info}</span>
+    <span class="toast-message">${message}</span>
+    <div class="toast-progress"></div>
+  `;
+
+  container.appendChild(toast);
+
+  // Auto-remove after duration
+  const timer = setTimeout(() => {
+    toast.classList.add('toast-exit');
+    toast.addEventListener('animationend', () => toast.remove(), { once: true });
+  }, durationMs);
+
+  // Click to dismiss early
+  toast.addEventListener('click', () => {
+    clearTimeout(timer);
+    toast.classList.add('toast-exit');
+    toast.addEventListener('animationend', () => toast.remove(), { once: true });
+  });
+
+  // Limit to 4 visible toasts
+  const toasts = container.querySelectorAll('.toast:not(.toast-exit)');
+  if (toasts.length > 4) {
+    toasts[0].classList.add('toast-exit');
+    toasts[0].addEventListener('animationend', () => toasts[0].remove(), { once: true });
+  }
+}
+
+// ═══════════════════════════════════════════
+// Skeleton Loading System
+// ═══════════════════════════════════════════
+
+function setSkeletonLoading(isLoading) {
+  const selectors = [
+    '.prop-val', '.info-value', '.output-badge',
+    '#active-mode-badge'
+  ];
+
+  selectors.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      if (isLoading && el.textContent.includes('Loading') || isLoading && el.textContent.includes('Detecting') || isLoading && el.textContent.includes('Checking') || isLoading && el.textContent.includes('Scanning')) {
+        el.classList.add('skeleton-text');
+      } else {
+        el.classList.remove('skeleton-text');
+      }
+    });
+  });
+}
+
+// ═══════════════════════════════════════════
+// Value Change Flash Animation
+// ═══════════════════════════════════════════
+
+const previousValues = {};
+
+function updateElementWithFlash(id, newValue) {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  el.classList.remove('skeleton-text');
+  const oldValue = previousValues[id];
+  el.textContent = newValue;
+
+  if (oldValue !== undefined && oldValue !== newValue) {
+    el.classList.remove('value-updated');
+    // Force reflow to restart animation
+    void el.offsetWidth;
+    el.classList.add('value-updated');
+  }
+
+  previousValues[id] = newValue;
+}
+
+// ═══════════════════════════════════════════
+// KSU Exec Bridge
+// ═══════════════════════════════════════════
+
 function extractStdout(rawRes) {
   logToConsole(`[RAW TYPE] ${typeof rawRes}`, true);
   if (rawRes === null || rawRes === undefined) return '';
@@ -50,38 +146,31 @@ function extractStdout(rawRes) {
   return String(rawRes || '').trim();
 }
 
+async function yieldToBrowser() {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+}
+
 async function execCmdVerbose(cmd) {
   logToConsole(`[EXEC] ${cmd}`, true);
   try {
     let res = null;
-    if (window.ksu && typeof window.ksu.exec === 'function') {
+    const ksuApi = (window.ksu && typeof window.ksu.exec === 'function') 
+      ? window.ksu 
+      : ((typeof ksu !== 'undefined' && typeof ksu.exec === 'function') ? ksu : null);
+
+    if (ksuApi) {
       try {
-        res = await window.ksu.exec(cmd, '{}');
-        logToConsole(`[window.ksu.exec(cmd, '{}')] returned`, true);
-      } catch (e) {
-        logToConsole(`[window.ksu.exec 2 args err] ${e.message || e}`, true);
-      }
-      if (!res) {
+        res = await ksuApi.exec(cmd);
+        logToConsole(`[ksu.exec(cmd)] returned`, true);
+      } catch (e1) {
+        logToConsole(`[ksu.exec 1 arg err] ${e1.message || e1}`, true);
         try {
-          res = await window.ksu.exec(cmd);
-          logToConsole(`[window.ksu.exec(cmd)] returned`, true);
-        } catch (e) {
-          logToConsole(`[window.ksu.exec 1 arg err] ${e.message || e}`, true);
-        }
-      }
-    } else if (typeof ksu !== 'undefined' && typeof ksu.exec === 'function') {
-      try {
-        res = await ksu.exec(cmd, '{}');
-        logToConsole(`[ksu.exec(cmd, '{}')] returned`, true);
-      } catch (e) {
-        logToConsole(`[ksu.exec 2 args err] ${e.message || e}`, true);
-      }
-      if (!res) {
-        try {
-          res = await ksu.exec(cmd);
-          logToConsole(`[ksu.exec(cmd)] returned`, true);
-        } catch (e) {
-          logToConsole(`[ksu.exec 1 arg err] ${e.message || e}`, true);
+          res = await ksuApi.exec(cmd, '{}');
+          logToConsole(`[ksu.exec(cmd, '{}')] returned`, true);
+        } catch (e2) {
+          logToConsole(`[ksu.exec 2 args err] ${e2.message || e2}`, true);
         }
       }
     } else {
@@ -100,37 +189,49 @@ async function execCmdVerbose(cmd) {
   return '';
 }
 
+// ═══════════════════════════════════════════
 // Button Loading Helper
-function setButtonLoading(btnId, isLoading, loadingText) {
+// ═══════════════════════════════════════════
+
+async function setButtonLoading(btnId, isLoading, loadingText) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
 
   if (isLoading) {
-    btn.dataset.originalHtml = btn.innerHTML;
+    if (!btn.dataset.originalHtml) {
+      btn.dataset.originalHtml = btn.innerHTML;
+    }
     btn.disabled = true;
     btn.innerHTML = `
       <svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
         <path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="1"></path>
       </svg>
-      ${loadingText}
+      <span>${loadingText}</span>
     `;
+    await yieldToBrowser();
   } else {
     btn.disabled = false;
     if (btn.dataset.originalHtml) {
       btn.innerHTML = btn.dataset.originalHtml;
+      delete btn.dataset.originalHtml;
     }
   }
 }
 
 // Card Pulse Overlay Helper
-function setCardsLoading(isLoading) {
+async function setCardsLoading(isLoading) {
   const cards = document.querySelectorAll('.card');
   cards.forEach(card => {
     if (isLoading) card.classList.add('is-loading');
     else card.classList.remove('is-loading');
   });
+  if (isLoading) await yieldToBrowser();
 }
+
+// ═══════════════════════════════════════════
+// Audio Status Query
+// ═══════════════════════════════════════════
 
 let cachedWorkingCmd = null;
 
@@ -177,44 +278,39 @@ async function loadAudioOutputSession() {
 
       const data = JSON.parse(jsonText);
 
-      document.getElementById('out-device-name').textContent = data.active_route || 'Built-in Speaker';
-      document.getElementById('out-sample-rate').textContent = data.sample_rate || '48,000 Hz';
-      document.getElementById('out-bitrate').textContent = data.bitrate || '16-bit PCM';
-      document.getElementById('out-dac-info').textContent = data.is_usb ? `${data.dac_name || 'USB DAC'} • ${data.sync_mode || 'ASYNC'}` : 'No USB DAC Connected';
-      document.getElementById('out-bt-codec').textContent = data.is_bt ? `${data.bt_name || 'Bluetooth'} • ${data.bt_codec || 'A2DP'}` : 'Bluetooth Audio Disconnected';
+      // Use updateElementWithFlash for value-change animations
+      updateElementWithFlash('out-device-name', data.active_route || 'Built-in Speaker');
+      updateElementWithFlash('out-sample-rate', data.sample_rate || '48,000 Hz');
+      updateElementWithFlash('out-bitrate', data.bitrate || '16-bit PCM');
+      updateElementWithFlash('out-dac-info', data.is_usb ? `${data.dac_name || 'USB DAC'} • ${data.sync_mode || 'ASYNC'}` : 'No USB DAC Connected');
+      updateElementWithFlash('out-bt-codec', data.is_bt ? `${data.bt_name || 'Bluetooth'} • ${data.bt_codec || 'A2DP'}` : 'Bluetooth Audio Disconnected');
 
-      document.getElementById('prop-vol-steps').textContent = (data.vol_steps || '100') + ' steps';
+      updateElementWithFlash('prop-vol-steps', (data.vol_steps || '100') + ' steps');
 
       const resamplerVal = data.resampler || 'Default (Dynamic Hi-Fi)';
       let resamplerLabel = resamplerVal;
       if (resamplerVal === '7') resamplerLabel = '7 (Mastering Quality / 179 dB)';
       else if (resamplerVal === '4') resamplerLabel = '4 (Mid-Grade / Power Saver)';
       else if (/^\d+$/.test(resamplerVal)) resamplerLabel = resamplerVal + ' (Custom)';
-      document.getElementById('prop-resampler-quality').textContent = resamplerLabel;
+      updateElementWithFlash('prop-resampler-quality', resamplerLabel);
 
-      document.getElementById('prop-effects-status').textContent = (data.ignore_fx === 'true') ? 'Disabled (Direct Pass)' : 'Active';
-      document.getElementById('prop-spatializer-status').textContent = (data.spatializer === 'false') ? 'Disabled' : 'Enabled';
-      document.getElementById('prop-safemedia-status').textContent = (data.safemedia === 'true') ? 'Bypassed' : 'Default';
-      document.getElementById('prop-usb-period').textContent = (data.usb_period || '2000') + ' μs';
+      updateElementWithFlash('prop-effects-status', (data.ignore_fx === 'true') ? 'Disabled (Direct Pass)' : 'Active');
+      updateElementWithFlash('prop-spatializer-status', (data.spatializer === 'false') ? 'Disabled' : 'Enabled');
+      updateElementWithFlash('prop-safemedia-status', (data.safemedia === 'true') ? 'Bypassed' : 'Default');
+      updateElementWithFlash('prop-usb-period', (data.usb_period || '2000') + ' μs');
 
       // New audiophile properties
-      const propOffload = document.getElementById('prop-offload-24bit');
-      if (propOffload) propOffload.textContent = (data.offload_24bit === 'true') ? 'Enabled (24-bit HAL)' : 'Disabled';
+      updateElementWithFlash('prop-offload-24bit', (data.offload_24bit === 'true') ? 'Enabled (24-bit HAL)' : 'Disabled');
 
-      const propPsd = document.getElementById('prop-psd-stopband');
-      if (propPsd) {
-        const psdVal = data.psd_stopband || 'default';
-        propPsd.textContent = (psdVal !== 'default') ? psdVal + ' dB (Clinical SRC)' : 'Default (System)';
-      }
+      const psdVal = data.psd_stopband || 'default';
+      updateElementWithFlash('prop-psd-stopband', (psdVal !== 'default') ? psdVal + ' dB (Clinical SRC)' : 'Default (System)');
 
-      const propFlinger = document.getElementById('prop-flinger-standby');
-      if (propFlinger) {
-        const flingerVal = data.flinger_standby || 'default';
-        if (flingerVal === '200') propFlinger.textContent = '200 ms (Warm Path)';
-        else if (flingerVal === '60') propFlinger.textContent = '60 ms (Quick Standby)';
-        else if (flingerVal !== 'default') propFlinger.textContent = flingerVal + ' ms';
-        else propFlinger.textContent = 'Default (System)';
-      }
+      const flingerVal = data.flinger_standby || 'default';
+      let flingerLabel = 'Default (System)';
+      if (flingerVal === '200') flingerLabel = '200 ms (Warm Path)';
+      else if (flingerVal === '60') flingerLabel = '60 ms (Quick Standby)';
+      else if (flingerVal !== 'default') flingerLabel = flingerVal + ' ms';
+      updateElementWithFlash('prop-flinger-standby', flingerLabel);
 
       // Audiophile & Mode Specific Props
       const modeVal = data.mode || 'audiophile';
@@ -222,6 +318,7 @@ async function loadAudioOutputSession() {
       
       const badgeMode = document.getElementById('active-mode-badge');
       if (badgeMode) {
+        badgeMode.classList.remove('skeleton-text');
         badgeMode.textContent = isAudiophile ? 'Audiophile Hi-Fi Mode' : 'Power Saver Mode';
         badgeMode.className = `badge mode-badge ${isAudiophile ? 'audiophile' : 'powersaver'}`;
       }
@@ -238,40 +335,41 @@ async function loadAudioOutputSession() {
         }
       }
 
-      const propIntCodec = document.getElementById('prop-int-codec');
-      if (propIntCodec) propIntCodec.textContent = (data.int_codec === 'true') ? 'Enabled (Direct Pipeline)' : 'Standard';
+      updateElementWithFlash('prop-int-codec', (data.int_codec === 'true') ? 'Enabled (Direct Pipeline)' : 'Standard');
 
-      const propAdmBuffering = document.getElementById('prop-adm-buffering');
-      if (propAdmBuffering) {
-        const admVal = data.adm_buffering || '6';
-        if (admVal === '6') propAdmBuffering.textContent = '6 ms (Low-Jitter Bounds)';
-        else if (admVal === '10') propAdmBuffering.textContent = '10 ms (Power Saver)';
-        else propAdmBuffering.textContent = admVal + ' ms';
-      }
+      const admVal = data.adm_buffering || '6';
+      let admLabel = admVal + ' ms';
+      if (admVal === '6') admLabel = '6 ms (Low-Jitter Bounds)';
+      else if (admVal === '10') admLabel = '10 ms (Power Saver)';
+      updateElementWithFlash('prop-adm-buffering', admLabel);
 
-      const propDeepBuffer = document.getElementById('prop-deep-buffer');
-      if (propDeepBuffer) propDeepBuffer.textContent = (data.deep_buffer === 'false') ? 'Disabled (Bypassed)' : 'Enabled (Power Saving)';
+      updateElementWithFlash('prop-deep-buffer', (data.deep_buffer === 'false') ? 'Disabled (Bypassed)' : 'Enabled (Power Saving)');
 
       const propTinymix = document.getElementById('prop-tinymix-status');
-      if (propTinymix) propTinymix.textContent = data.has_tinymix ? (isAudiophile ? 'LOHIFI Bias (Active)' : 'ULP Power Mode') : 'Not Available';
+      if (propTinymix) {
+        propTinymix.classList.remove('skeleton-text');
+        propTinymix.textContent = data.has_tinymix ? (isAudiophile ? 'LOHIFI Bias (Active)' : 'ULP Power Mode') : 'Not Available';
+      }
 
-      document.getElementById('info-platform').textContent = data.platform || 'Android Platform';
-      document.getElementById('info-arch').textContent = data.arch || 'arm64-v8a';
-      document.getElementById('info-audioserver-pid').textContent = data.audioserver_pid ? `PID ${data.audioserver_pid}` : 'running';
+      updateElementWithFlash('info-platform', data.platform || 'Android Platform');
+      updateElementWithFlash('info-arch', data.arch || 'arm64-v8a');
+      updateElementWithFlash('info-audioserver-pid', data.audioserver_pid ? `PID ${data.audioserver_pid}` : 'running');
 
       const stateBadge = document.getElementById('output-state-badge');
       if (stateBadge) {
+        stateBadge.classList.remove('skeleton-text');
         stateBadge.textContent = data.is_usb ? 'USB Route Active' : (data.is_bt ? 'Bluetooth Active' : 'Speaker Active');
       }
 
       logToConsole(`[SUCCESS] Profile=[${modeVal}] | Route=[${data.active_route}] | SampleRate=[${data.sample_rate}] | DAC=[${data.dac_name || 'USB DAC'}]`);
-      return;
+      return true;
     } catch (e) {
       logToConsole(`[JSON PARSE ERR] ${e.message}`);
     }
   }
 
   logToConsole('Notice: Backend status query returned empty or invalid JSON.');
+  return false;
 }
 
 async function updateModuleStatus() {
@@ -289,18 +387,36 @@ async function updateModuleStatus() {
 
 async function refreshAll() {
   setCardsLoading(true);
+  setSkeletonLoading(true);
   try {
-    await Promise.all([updateModuleStatus(), loadAudioOutputSession()]);
+    const [, success] = await Promise.all([updateModuleStatus(), loadAudioOutputSession()]);
+    setSkeletonLoading(false);
+    return success;
+  } catch (err) {
+    setSkeletonLoading(false);
+    return false;
   } finally {
     setCardsLoading(false);
   }
 }
 
+// ═══════════════════════════════════════════
+// Mode Switching
+// ═══════════════════════════════════════════
+
 async function switchAudioMode(targetMode) {
   const isAudiophile = targetMode === 'audiophile';
   const btnId = isAudiophile ? 'btn-mode-audiophile' : 'btn-mode-power-saver';
+  const otherBtnId = isAudiophile ? 'btn-mode-power-saver' : 'btn-mode-audiophile';
+  const modeName = isAudiophile ? 'Audiophile Hi-Fi' : 'Power Saver';
+
   logToConsole(`Switching audio profile to: ${targetMode}...`);
-  setButtonLoading(btnId, true, 'Applying Profile...');
+  showToast(`Switching to ${modeName} mode...`, 'info', 2000);
+  await setButtonLoading(btnId, true, 'Applying Profile...');
+
+  // Disable the other mode button too
+  const otherBtn = document.getElementById(otherBtnId);
+  if (otherBtn) otherBtn.disabled = true;
 
   const commands = [
     `/system/bin/sh /data/adb/modules/audio-misc-settings-ksu-webui/set_audio_mode.sh ${targetMode}`,
@@ -323,12 +439,19 @@ async function switchAudioMode(targetMode) {
     }
     await new Promise(r => setTimeout(r, 1200));
     await refreshAll();
+    showToast(`${modeName} mode applied successfully`, 'success');
+  } catch (err) {
+    showToast(`Failed to switch mode: ${err.message || 'Unknown error'}`, 'error');
   } finally {
-    setButtonLoading(btnId, false);
+    await setButtonLoading(btnId, false);
+    if (otherBtn) otherBtn.disabled = false;
   }
 }
 
-// Event Listeners
+// ═══════════════════════════════════════════
+// Event Listeners & Initialization
+// ═══════════════════════════════════════════
+
 document.addEventListener('DOMContentLoaded', () => {
   const toggleVerbose = document.getElementById('toggle-verbose');
   if (toggleVerbose) {
@@ -337,44 +460,53 @@ document.addEventListener('DOMContentLoaded', () => {
       isVerbose = e.target.checked;
       localStorage.setItem('verbose_logging', isVerbose);
       logToConsole(isVerbose ? 'Verbose logging enabled.' : 'Verbose logging disabled.');
+      showToast(isVerbose ? 'Verbose logging enabled' : 'Verbose logging disabled', 'info', 2000);
     });
   }
 
+  // Initial skeleton state
+  setSkeletonLoading(true);
   refreshAll();
 
   document.getElementById('btn-refresh').addEventListener('click', async () => {
     logToConsole('Refreshing status...');
-    setButtonLoading('btn-refresh', true, 'Refreshing...');
+    await setButtonLoading('btn-refresh', true, 'Refreshing...');
     try {
-      await refreshAll();
+      const success = await refreshAll();
+      if (success) showToast('Status refreshed', 'success', 2000);
     } finally {
-      setButtonLoading('btn-refresh', false);
+      await setButtonLoading('btn-refresh', false);
     }
   });
 
   document.getElementById('btn-restart-audio').addEventListener('click', async () => {
     logToConsole('Executing: setprop ctl.restart audioserver');
-    setButtonLoading('btn-restart-audio', true, 'Restarting...');
+    showToast('Restarting audioserver...', 'warning', 2000);
+    await setButtonLoading('btn-restart-audio', true, 'Restarting...');
     try {
       await execCmdVerbose('/system/bin/setprop ctl.restart audioserver');
       logToConsole('Audioserver restart signal sent successfully.');
       await new Promise(r => setTimeout(r, 1200));
       await refreshAll();
+      showToast('Audioserver restarted successfully', 'success');
+    } catch (err) {
+      showToast('Audioserver restart failed', 'error');
     } finally {
-      setButtonLoading('btn-restart-audio', false);
+      await setButtonLoading('btn-restart-audio', false);
     }
   });
 
   document.getElementById('btn-apply-volume').addEventListener('click', async () => {
     logToConsole('Executing: settings put system volume_steps_music 100');
-    setButtonLoading('btn-apply-volume', true, 'Applying...');
+    await setButtonLoading('btn-apply-volume', true, 'Applying...');
     try {
       await execCmdVerbose('/system/bin/settings put system volume_steps_music 100');
       logToConsole('Volume steps set to 100.');
       await new Promise(r => setTimeout(r, 800));
       await refreshAll();
+      showToast('Volume steps set to 100', 'success', 2500);
     } finally {
-      setButtonLoading('btn-apply-volume', false);
+      await setButtonLoading('btn-apply-volume', false);
     }
   });
 
@@ -382,13 +514,15 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnTinymix) {
     btnTinymix.addEventListener('click', async () => {
       logToConsole('Executing ALSA tinymix hardware gain calibration...');
-      setButtonLoading('btn-tinymix-hw', true, 'Applying...');
+      showToast('Applying ALSA hardware gain...', 'info', 2000);
+      await setButtonLoading('btn-tinymix-hw', true, 'Applying...');
       try {
         await execCmdVerbose('/system/bin/sh /data/adb/modules/audio-misc-settings-ksu-webui/set_audio_mode.sh tinymix_only');
         logToConsole('ALSA hardware gain applied successfully.');
         await refreshAll();
+        showToast('ALSA hardware gain applied', 'success');
       } finally {
-        setButtonLoading('btn-tinymix-hw', false);
+        await setButtonLoading('btn-tinymix-hw', false);
       }
     });
   }
@@ -405,5 +539,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-clear-console').addEventListener('click', () => {
     document.getElementById('console-output').textContent = 'Console cleared.';
+    showToast('Console cleared', 'info', 1500);
   });
 });

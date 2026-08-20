@@ -31,7 +31,7 @@ jobs:
       - name: Package Module Zip
         run: |
           ZIP_NAME="audio-misc-settings-ksu-webui.zip"
-          zip -r "$ZIP_NAME" . -x "*.git*" "*.github*" "*.zip"
+          zip -r "$ZIP_NAME" . -x "*.git*" "*.github*" "*.zip" "assets/*" "*assets*" "*.png" "*.jpg" "*.jpeg" "*.webp"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

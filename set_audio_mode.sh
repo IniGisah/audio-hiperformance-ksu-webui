@@ -89,6 +89,7 @@ apply_tinymix_hw() {
     fi
 }
 
+ACTION_ARG="$1"
 TARGET_MODE="$1"
 
 if [ "$TARGET_MODE" = "tinymix_only" ]; then
@@ -110,6 +111,13 @@ if [ -z "$TARGET_MODE" ] || [ "$TARGET_MODE" = "apply" ]; then
     fi
 fi
 
+PREV_MODE=""
+if [ -r "$CONF_FILE" ]; then
+    PREV_MODE="$(grep '^MODE=' "$CONF_FILE" | cut -d= -f2 | tr -d ' \r')"
+fi
+PREV_DEEP="$(getprop audio.deep_buffer.media)"
+PREV_RESAMPLER="$(getprop af.resampler.quality)"
+
 case "$TARGET_MODE" in
     "power_saver" | "battery" | "saver" )
         TARGET_MODE="power_saver"
@@ -130,12 +138,14 @@ case "$TARGET_MODE" in
         # Quick AudioFlinger standby: release hardware fast when idle
         set_prop "ro.audio.flinger_standbytime_ms" "60"
 
+        # Enable 24-bit PCM offload so Hi-Res (96kHz/192kHz) tracks can play without choking
+        set_prop "audio.offload.pcm.24bit.enable" "true"
+
         # Delete audiophile-specific PSD resampler props to reduce processing overhead
         delete_prop "ro.audio.resampler.psd.enable_at_samplerate"
         delete_prop "ro.audio.resampler.psd.stopband"
         delete_prop "ro.audio.resampler.psd.halflength"
         delete_prop "ro.audio.resampler.psd.tbwcheat"
-        delete_prop "audio.offload.pcm.24bit.enable"
 
         apply_tinymix_hw "power_saver"
         ;;
@@ -178,20 +188,22 @@ esac
 # Save state
 echo "MODE=${TARGET_MODE}" > "$CONF_FILE" 2>/dev/null
 
-# Restart audioserver ONLY if property values actually changed (avoids dropping active Bluetooth sessions on boot)
-CURR_DEEP="$(getprop audio.deep_buffer.media)"
+# Restart audioserver if mode switched or if key properties changed
 RESTART_NEEDED=0
-
-if [ "$TARGET_MODE" = "audiophile" ] && [ "$CURR_DEEP" != "false" ]; then
+if [ "$ACTION_ARG" = "audiophile" ] || [ "$ACTION_ARG" = "power_saver" ] || [ "$ACTION_ARG" = "battery" ] || [ "$ACTION_ARG" = "saver" ]; then
     RESTART_NEEDED=1
-elif [ "$TARGET_MODE" = "power_saver" ] && [ "$CURR_DEEP" != "true" ]; then
+elif [ -n "$PREV_MODE" ] && [ "$PREV_MODE" != "$TARGET_MODE" ]; then
+    RESTART_NEEDED=1
+elif [ "$TARGET_MODE" = "audiophile" ] && [ "$PREV_DEEP" != "false" ]; then
+    RESTART_NEEDED=1
+elif [ "$TARGET_MODE" = "power_saver" ] && [ "$PREV_DEEP" != "true" ]; then
     RESTART_NEEDED=1
 fi
 
 if [ "$RESTART_NEEDED" = "1" ]; then
     if [ -n "$(getprop init.svc.audioserver)" ]; then
         setprop ctl.restart audioserver
-        sleep 1
+        sleep 0.8
         if [ "$(getprop init.svc.audioserver)" != "running" ]; then
             pid="$(getprop init.svc_debug_pid.audioserver)"
             if [ -n "$pid" ]; then

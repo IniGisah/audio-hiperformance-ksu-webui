@@ -71,7 +71,7 @@ function stopDRC()
 {
     if [ $# -eq 2  -a  -r "$1"  -a  -w "$2" ]; then
         cp -f "$1" "$2"
-        sed -i 's/speaker_drc_enabled[[:space:]]*=[[:space:]]*"true"/speaker_drc_enabled="false"/' "$2"
+        sed -i 's/speaker_drc_enabled[[[:space:]]]*=[[[:space:]]]*"true"/speaker_drc_enabled="false"/' "$2"
     fi
 }
 
@@ -260,30 +260,6 @@ function patchClearTensorOffloadLock()
     fi
 }
 
-# Helper: Install a patched/generated file into the module overlay with correct permissions
-function install_mod_file()
-{
-    local src="$1" dst="$2" secon="${3:-u:object_r:vendor_file:s0}"
-    mkdir -p "${dst%/*}"
-    if [ "$src" = "null" ]; then
-        cp /dev/null "$dst"
-    fi
-    chmod 644 "$dst"
-    chcon "$secon" "$dst"
-    chown root:root "$dst"
-    chmod -R a+rX "${dst%/*}"
-}
-
-# Helper: Append a file path to the REPLACEFILES list
-function append_replacefile()
-{
-    if [ -z "${REPLACEFILES}" ]; then
-        REPLACEFILES="$1"
-    else
-        REPLACEFILES="${REPLACEFILES} $1"
-    fi
-}
-
 function makeLibraries()
 {
     local VENDORDIR="$(getVendorDir)"
@@ -308,8 +284,31 @@ function makeLibraries()
 
 function nullifySoundFx()
 {
-    # Deprecated: Nullifying shared libraries causes audioserver SIGSEGV on modern Android / OEM HALs
-    return 0
+    local VENDORDIR="$(getVendorDir)"
+    local d lname modfile
+    
+    if [ -z "$VENDORDIR" ]; then
+        return 1
+    fi
+    
+    for d in "lib" "lib64"; do
+        for lname in "libvolumelistener.so" "libdlbvol.so"; do
+            if [ -r "${VENDORDIR}/${d}/soundfx/${lname}" ]; then
+                modfile="${MODPATH}/system/vendor/${d}/soundfx/${lname}"
+                mkdir -p "${modfile%/*}"
+                cp /dev/null "$modfile"
+                chmod 644 "$modfile"
+                chcon u:object_r:vendor_file:s0 "$modfile"
+                chown root:root "$modfile"
+                chmod -R a+rX "${modfile%/*}"
+                if [ -z "${REPLACEFILES}" ]; then
+                    REPLACEFILES="/system/vendor/${d}/soundfx/${lname}"
+                else
+                    REPLACEFILES="${REPLACEFILES} /system/vendor/${d}/soundfx/${lname}"
+                fi
+            fi
+        done
+    done
 }
 
 function makeUnlockedLibraries()
@@ -324,18 +323,32 @@ function makeUnlockedLibraries()
     for d in "lib" "lib64"; do
         for lname in "libalsautils.so" "libalsautilsv2.so"; do
             if [ -r "${VENDORDIR}/${d}/${lname}" ]; then
-                dst="${MODPATH}/system/vendor/${d}/${lname}"
-                patchClearLock "${VENDORDIR}/${d}/${lname}" "$dst" "max"
-                install_mod_file "patched" "$dst"
-                append_replacefile "/system/vendor/${d}/${lname}"
+                mkdir -p "${MODPATH}/system/vendor/${d}"
+                patchClearLock "${VENDORDIR}/${d}/${lname}" "${MODPATH}/system/vendor/${d}/${lname}" "max"
+                chmod 644 "${MODPATH}/system/vendor/${d}/${lname}"
+                chcon u:object_r:vendor_file:s0 "${MODPATH}/system/vendor/${d}/${lname}"
+                chown root:root "${MODPATH}/system/vendor/${d}/${lname}"
+                chmod -R a+rX "${MODPATH}/system/vendor/${d}"
+                if [ -z "${REPLACEFILES}" ]; then
+                    REPLACEFILES="/system/vendor/${d}/${lname}"
+                else
+                    REPLACEFILES="${REPLACEFILES} /system/vendor/${d}/${lname}"
+                fi
             fi
         done        
         for lname in "audio_usb_aoc.so"; do
             if [ -r "${VENDORDIR}/${d}/${lname}" ]; then
-                dst="${MODPATH}/system/vendor/${d}/${lname}"
-                patchClearTensorOffloadLock "${VENDORDIR}/${d}/${lname}" "$dst"
-                install_mod_file "patched" "$dst"
-                append_replacefile "/system/vendor/${d}/${lname}"
+                mkdir -p "${MODPATH}/system/vendor/${d}"
+                patchClearTensorOffloadLock "${VENDORDIR}/${d}/${lname}" "${MODPATH}/system/vendor/${d}/${lname}"
+                chmod 644 "${MODPATH}/system/vendor/${d}/${lname}"
+                chcon u:object_r:vendor_file:s0 "${MODPATH}/system/vendor/${d}/${lname}"
+                chown root:root "${MODPATH}/system/vendor/${d}/${lname}"
+                chmod -R a+rX "${MODPATH}/system/vendor/${d}"
+                if [ -z "${REPLACEFILES}" ]; then
+                    REPLACEFILES="/system/vendor/${d}/${lname}"
+                else
+                    REPLACEFILES="${REPLACEFILES} /system/vendor/${d}/${lname}"
+                fi
             fi
         done        
     done
@@ -356,29 +369,28 @@ function loosenedMessage()
     ui_print ""
 }
 
+# Helper: Apply sed replacements to both system.prop and system.prop-workaround
+#   All arguments are passed directly to sed -i as -e expressions
+function sed_system_props()
+{
+    sed -i "$@" "$MODPATH/system.prop"
+    sed -i "$@" "$MODPATH/system.prop-workaround"
+}
+
+# Helper: Set USB period values in both system.prop files
+#   arg1: period value in microseconds
+function set_usb_period()
+{
+    local val="$1"
+    sed_system_props \
+        -e "s/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=${val}/" \
+        -e "s/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=${val}/"
+}
+
+# VHPerf / SDM845 / MTK Dimensity / Tensor — all use 2000μs period
 function replaceSystemProps_VHPerf()
 {
-    sed -i \
-        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
-        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
-            "$MODPATH/system.prop"
-    sed -i \
-        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
-        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
-            "$MODPATH/system.prop-workaround"
-   
-    sed -i \
-        -e 's/ro\.audio\.resampler\.psd\.enable_at_samplerate=.*$/ro\.audio\.resampler\.psd\.enable_at_samplerate=44100/' \
-        -e 's/ro\.audio\.resampler\.psd\.stopband=.*$/ro\.audio\.resampler\.psd\.stopband=194/' \
-        -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=520/' \
-        -e 's/ro\.audio\.resampler\.psd\.tbwcheat=.*$/ro\.audio\.resampler\.psd\.tbwcheat=98/' \
-            "$MODPATH/system.prop"
-    sed -i \
-        -e 's/ro\.audio\.resampler\.psd\.enable_at_samplerate=.*$/ro\.audio\.resampler\.psd\.enable_at_samplerate=44100/' \
-        -e 's/ro\.audio\.resampler\.psd\.stopband=.*$/ro\.audio\.resampler\.psd\.stopband=194/' \
-        -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=520/' \
-        -e 's/ro\.audio\.resampler\.psd\.tbwcheat=.*$/ro\.audio\.resampler\.psd\.tbwcheat=98/' \
-            "$MODPATH/system.prop-workaround"
+    set_usb_period 2000
 }
 
 function replaceSystemProps_Old()
@@ -392,7 +404,9 @@ function replaceSystemProps_Old()
             -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2250/' \
             -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2250/' \
                 "$MODPATH/system.prop-workaround"
+        
         loosenedMessage
+        
     else
         sed -i \
             -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2250/' \
@@ -402,6 +416,7 @@ function replaceSystemProps_Old()
             -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2250/' \
             -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2250/' \
                 "$MODPATH/system.prop-workaround"
+    
     fi
     
     sed -i \
@@ -413,6 +428,7 @@ function replaceSystemProps_Old()
     sed -i \
         -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=320/' \
             "$MODPATH/system.prop-workaround"
+
 }
 
 function replaceSystemProps_S4()
@@ -426,7 +442,9 @@ function replaceSystemProps_S4()
             -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=5000/' \
             -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=5000/' \
                 "$MODPATH/system.prop-workaround"
+        
         loosenedMessage
+        
     else
         sed -i \
             -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=3875/' \
@@ -436,6 +454,7 @@ function replaceSystemProps_S4()
             -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=3875/' \
             -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=3875/' \
                 "$MODPATH/system.prop-workaround"
+
     fi
     
     sed -i \
@@ -451,26 +470,13 @@ function replaceSystemProps_S4()
 
 function replaceSystemProps_Kona()
 {
-    sed -i \
-        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=4000/' \
-        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=4000/' \
-            "$MODPATH/system.prop"
-    sed -i \
-        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=4000/' \
-        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=4000/' \
-            "$MODPATH/system.prop-workaround"
+    set_usb_period 4000
 }
 
+# SDM845 / MTK Dimensity / Tensor all use same 2000μs period as VHPerf
 function replaceSystemProps_SDM845()
 {
-    sed -i \
-        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
-        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
-            "$MODPATH/system.prop"
-    sed -i \
-        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
-        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
-            "$MODPATH/system.prop-workaround"
+    set_usb_period 2000
 }
 
 function replaceSystemProps_SDM()
@@ -480,33 +486,12 @@ function replaceSystemProps_SDM()
 
 function replaceSystemProps_MTK_Dimensity()
 {
-    sed -i \
-        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
-        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
-            "$MODPATH/system.prop"
-    sed -i \
-        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
-        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
-            "$MODPATH/system.prop-workaround"
+    set_usb_period 2000
 }
 
 function replaceSystemProps_Tensor()
 {
-    sed -i \
-        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
-        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
-            "$MODPATH/system.prop"
-    sed -i \
-        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
-        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
-            "$MODPATH/system.prop-workaround"
-            
-    sed -i \
-        -e 's/ro\.audio\.resampler\.psd\.enable_at_samplerate=.*$/ro\.audio\.resampler\.psd\.enable_at_samplerate=48000/' \
-        -e 's/ro\.audio\.resampler\.psd\.stopband=.*$/ro\.audio\.resampler\.psd\.stopband=194/' \
-        -e 's/ro\.audio\.resampler\.psd\.halflength=.*$/ro\.audio\.resampler\.psd\.halflength=520/' \
-        -e 's/ro\.audio\.resampler\.psd\.tbwcheat=.*$/ro\.audio\.resampler\.psd\.tbwcheat=83/' \
-            "$MODPATH/system.prop"
+    set_usb_period 2000
 }
 
 function replaceSystemProps_Others()
@@ -520,6 +505,7 @@ function replaceSystemProps_Others()
             -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
             -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
                 "$MODPATH/system.prop-workaround"
+        
         loosenedMessage
     fi
 }
@@ -537,6 +523,7 @@ function deleteSystemProps_for_some_Stocks()
         sed -i \
             -e '/^ro\.config\.media_vol_steps=/d' \
                 "$MODPATH/system.prop-workaround"
+        
     fi
 }
 
@@ -544,7 +531,8 @@ function stopSpatializer()
 {
     if [ $# -eq 2  -a  -r "$1"  -a  -w "$2" ]; then
         cp -f "$1" "$2"
-        sed -i 's/flags[[:space:]]*=[[:space:]]*"AUDIO_OUTPUT_FLAG_SPATIALIZER"//' "$2"
+        # Change an audio_policy_configuration.xml file to remove Spatializer
+        sed -i 's/flags[:space:]*=[:space:]*"AUDIO_OUTPUT_FLAG_SPATIALIZER"//' "$2"
     fi
 }
 
@@ -605,40 +593,4 @@ function ui_print_replacelist()
     for f in $1; do
         ui_print "- Replace target file: $f"
     done
-}
-
-function disableDrcAudioPolicyConfig()
-{
-    if [ $# -ne 1  -o  -z "$1"  -o  ! -r "$1" ]; then
-        return 1
-    fi
-    local configXML="$1"
-
-    if [ -n "$configXML"  -a  -r "$configXML" ]; then
-        local modConfigXML="$MODPATH/system${configXML}"
-        mkdir -p "${modConfigXML%/*}"
-        cp -f "$configXML" "$modConfigXML"
-        sed -i 's/speaker_drc_enabled[[:space:]]*=[[:space:]]*"true"/speaker_drc_enabled="false"/g' "$modConfigXML"
-        install_mod_file "patched" "$modConfigXML" "u:object_r:vendor_configs_file:s0"
-        append_replacefile "/system${configXML}"
-    fi
-}
-
-function patchBitPerfectAudioPolicyConfig()
-{
-    if [ $# -ne 1  -o  -z "$1"  -o  ! -r "$1" ]; then
-        return 1
-    fi
-    local configXML="$1"
-
-    if [ -n "$configXML"  -a  -r "$configXML" ]; then
-        local modConfigXML="$MODPATH/system${configXML}"
-        mkdir -p "${modConfigXML%/*}"
-        cp -f "$configXML" "$modConfigXML"
-        if grep -q "AUDIO_OUTPUT_FLAG_DIRECT" "$modConfigXML" && ! grep -q "AUDIO_OUTPUT_FLAG_BIT_PERFECT" "$modConfigXML"; then
-            sed -i 's/AUDIO_OUTPUT_FLAG_DIRECT/AUDIO_OUTPUT_FLAG_DIRECT|AUDIO_OUTPUT_FLAG_BIT_PERFECT/g' "$modConfigXML"
-        fi
-        install_mod_file "patched" "$modConfigXML" "u:object_r:vendor_configs_file:s0"
-        append_replacefile "/system${configXML}"
-    fi
 }

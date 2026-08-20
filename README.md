@@ -77,6 +77,22 @@ Access the built-in control panel directly from **KernelSU Manager**, **KernelSU
 
 ---
 
+## 📸 Screenshots
+
+<p align="center">
+  <a href="assets/status.jpg">
+    <img src="assets/status.jpg" width="48%" alt="KernelSU WebUI - Status & Profile Switcher" />
+  </a>
+  <a href="assets/log.jpg">
+    <img src="assets/log.jpg" width="48%" alt="KernelSU WebUI - Verbose Execution Logs" />
+  </a>
+</p>
+<p align="center">
+  <sub><i>Tap or click any screenshot to view in full resolution</i></sub>
+</p>
+
+---
+
 ## 🔧 Installation & Safe Mode Recovery
 
 1. **Installation**:
@@ -85,6 +101,13 @@ Access the built-in control panel directly from **KernelSU Manager**, **KernelSU
 
 2. **Bootloop Safe Mode**:
    - If a conflict occurs with another audio mod, hold **Volume Down** during boot to trigger KernelSU Safe Mode, or remove `/data/adb/modules/audio-misc-settings-ksu-webui` via TWRP/recovery.
+
+---
+
+## 🙏 Credits & Acknowledgments
+
+- **Original Author**: Special thanks to **[zyhk / yzyhk904](https://github.com/yzyhk904)** for creating the original [Audio Misc. Settings](https://github.com/yzyhk904/Audio-Misc-Settings) Magisk module, foundational AudioFlinger resampler tuning, and hardware period buffer optimizations.
+- **KernelSU & WebUI Integration**: Enhanced, modernized, and expanded by **[Chthome Luii / IniGisah](https://github.com/IniGisah)** with KernelSU WebUI integration, dynamic audio profile switching, ALSA hardware controls, and banking app compatibility.
 
 ---
 
