@@ -1,17 +1,37 @@
+# Media Volume Steps & Safe Volume Bypass
 ro.config.media_vol_steps=100
 audio.safemedia.bypass=true
 audio.safemedia.force=false
 audio.safemedia.csd.force=false
-ro.audio.ignore_effects=true
-ro.audio.spatializer_enabled=false
-ro.vendor.audio.dolby.dax.support=false
-vendor.audio.dolby.control.support=false
+
+# Safe Pure-Audio Pass-Through & DSP Bypass
+vendor.audio.effect_policy.support=false
+ro.vendor.audio.fweffect=false
+persist.vendor.audio.supereffect.enable=false
+persist.vendor.audio.fpsop.game.effect=false
+persist.vendor.audio.misound.disable=true
+persist.audio.dolby.enabled=false
+persist.vendor.audio.effectimplenter=none
+
+# USB DAC Jitter Reduction & HAL Tuning
 vendor.audio.usb.perio=2000
 vendor.audio.usb.out.period_us=2000
 vendor.audio.usb.out.period_count=2
+
+# High-Fidelity Audio Pipeline & Hardware HiFi Acceleration
+persist.vendor.audio.hifi=true
+persist.vendor.audio.hifi.int_codec=true
+vendor.audio.adm.buffering.ms=6
+audio.deep_buffer.media=false
+vendor.audio.flac.sw.decoder.24bit=true
+ro.audio.flinger_standbytime_ms=200
+
+# Bluetooth HD Bitrate
 persist.bluetooth.sbc_hd_higher_bitrate=1
+
+# Mastering Quality Resampler Settings (AudioFlinger 32-bit Float)
 af.resampler.quality=7
 ro.audio.resampler.psd.enable_at_samplerate=44100
-ro.audio.resampler.psd.stopband=159
-ro.audio.resampler.psd.halflength=480
-ro.audio.resampler.psd.cutoff_percent=92
+ro.audio.resampler.psd.stopband=179
+ro.audio.resampler.psd.halflength=408
+ro.audio.resampler.psd.tbwcheat=99

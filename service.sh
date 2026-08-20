@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
-# sleep 31 secs needed for "settings" commands to become effective
-# and make volume medial steps to be 100 if a volume steps facility is used
+# Audio Misc. Settings service runner
+# Sets 100 volume steps and safe audiophile parameters after system initialization
 
 function which_resetprop_command()
 {
@@ -23,80 +23,35 @@ function additionalSettings()
 {
     local force_restart_server=0
     
-    if [ "`getprop persist.sys.phh.disable_audio_effects`" = "0" ]; then
-        resetprop_command="`which_resetprop_command`"
-        if [ -n "$resetprop_command" ]; then
-            # Workaround for recent Pixel Firmwares (not to reboot when resetprop'ing)
-            "$resetprop_command" --delete ro.audio.ignore_effects 1>"/dev/null" 2>&1
-            # End of workaround
-            "$resetprop_command" ro.audio.ignore_effects true
+    # Stop Tensor device's AOC daemons on Pixel devices for reducing significant jitter
+    for svc in aocd aocxd; do
+        if [ "`getprop init.svc.${svc}`" = "running" ]; then
+            setprop ctl.stop "$svc"
             force_restart_server=1
-        else
-            return 1
         fi
-    fi
+    done
     
-    # Stop Tensor device's AOC daemons for reducing significant jitter
-    if [ "`getprop init.svc.aocd`" = "running" ]; then
-        setprop ctl.stop aocd
-        force_restart_server=1
+    # Apply safe pure-audio properties if resetprop is available
+    local resetprop_command="`which_resetprop_command`"
+    if [ -n "$resetprop_command" ]; then
+        "$resetprop_command" vendor.audio.effect_policy.support false 1>"/dev/null" 2>&1
+        "$resetprop_command" ro.vendor.audio.fweffect false 1>"/dev/null" 2>&1
     fi
-    if [ "`getprop init.svc.aocxd`" = "running" ]; then
-        setprop ctl.stop aocxd
-        force_restart_server=1
-    fi
+
+    # Set 100 volume steps for fine volume control
+    local AndroidVersion="`getprop ro.system.build.version.release`"
+    local MIUI="`getprop ro.miui.ui.version.code`"
+    local Moto="`getprop ro.mot.build.customerid`"
     
-    # Nullifying the volume listener for no compressing audio (maybe a peak limiter)
-    #   for Qcomm devices only?
-    if [ -s "/vendor/lib/soundfx/libvolumelistener.so" ]; then
-        mount -o bind "/dev/null" "/vendor/lib/soundfx/libvolumelistener.so"
-        force_restart_server=1
-    fi
-    if [ -s "/vendor/lib64/soundfx/libvolumelistener.so" ]; then
-        mount -o bind "/dev/null" "/vendor/lib64/soundfx/libvolumelistener.so"
-        force_restart_server=1
+    if [ -z "$MIUI" ] && [ -z "$Moto" ]; then
+        settings put system volume_steps_music 100 2>/dev/null
     fi
 
-    #   for Motorola devices only?
-    if [ -s "/vendor/lib/soundfx/libdlbvol.so" ]; then
-        mount -o bind "/dev/null" "/vendor/lib/soundfx/libdlbvol.so"
-        force_restart_server=1
+    # Apply active Audio Mode (Audiophile vs Power Saver) & tinymix hardware gain
+    MODDIR="${0%/*}"
+    if [ -f "$MODDIR/set_audio_mode.sh" ]; then
+        sh "$MODDIR/set_audio_mode.sh" apply >/dev/null 2>&1
     fi
-    if [ -s "/vendor/lib64/soundfx/libdlbvol.so" ]; then
-        mount -o bind "/dev/null" "/vendor/lib64/soundfx/libdlbvol.so"
-        force_restart_server=1
-    fi
-
-    # Force disabling spatializer if OS reverted the spatializer setting during the booting process
-    if [ "`getprop ro.audio.spatializer_enabled`" = "true" ]; then
-        resetprop_command="`which_resetprop_command`"
-        if [ -n "$resetprop_command" ]; then
-            # Workaround for recent Pixel Firmwares (not to reboot when resetprop'ing)
-            "$resetprop_command" --delete ro.audio.spatializer_enabled 1>"/dev/null" 2>&1
-            # End of workaround
-            "$resetprop_command" ro.audio.spatializer_enabled false
-            force_restart_server=1
-        else
-            return 1
-        fi
-    fi
-
-        
-    if [ "$force_restart_server" = "1"  -o  "`getprop ro.system.build.version.release`" -ge "12" ]; then
-        if [ -n "`getprop init.svc.audioserver`" ]; then
-            setprop ctl.restart audioserver
-            sleep 1.2
-            if [ "`getprop init.svc.audioserver`" != "running" ]; then
-                # workaround for Android 12 old devices hanging up the audioserver after "setprop ctl.restart audioserver" is executed
-                local pid="`getprop init.svc_debug_pid.audioserver`"
-                if [ -n "$pid" ]; then
-                    kill -HUP $pid 1>"/dev/null" 2>&1
-                fi
-            fi
-        fi
-        
-    fi
-    settings put system volume_steps_music 100
 }
 
-(((sleep 31; additionalSettings)  0<&- &>"/dev/null" &) &)
+(((sleep 20; additionalSettings) 0<&- &>"/dev/null" &) &)

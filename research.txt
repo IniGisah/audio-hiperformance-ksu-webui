@@ -1,0 +1,202 @@
+Comprehensive Engineering Analysis of Android System Audio Architecture and Audiophile-Grade Optimizations
+The design architecture of the native Android operating system prioritizes unified system utility, resource efficiency, and hardware abstraction over the strict preservation of auditory fidelity [cite: 1, 2]. At the center of this functional architecture is AudioFlinger, the core system-level audio mixing engine [cite: 3]. Standard Android platforms route all application-level audio streams through AudioFlinger to perform real-time mixing, enabling notification alerts, game audio, and active media streams to play concurrently [cite: 1, 2, 3]. To maintain global clock synchronization and uniform buffer pipelines across disparate software layers, AudioFlinger enforces a constant system-wide sample rate and bit depth, typically locked to a baseline of 48 kHz at 16-bit or 24-bit stereo [cite: 1, 2, 3, 4, 5]. Consequently, standard Red Book CD-quality audio (mastered at 44.1 kHz / 16-bit) or high-resolution content (such as 96 kHz or 192 kHz files) is subjected to mandatory software Sample Rate Conversion (SRC) before reaching the hardware digital-to-analog converter (DAC) [cite: 1, 2]. This non-bit-perfect conversion process introduces mathematical interpolation artifacts, phase shifting, pre-echo, and harmonic distortions [cite: 1, 2, 6].
+While standard Android uses several software resampler profiles (linear, cubic, or sinc filters), their configuration is often optimized to minimize CPU overhead rather than ensure clinical precision [cite: 2]. To quantify this, the signal-to-noise ratio and dynamic range of an audio system can be modeled. The theoretical dynamic range (DR) of a digital stream is determined by its bit depth (N) using the standard quantization noise formula:
+DR≈6.02×N+1.76 dB
+When AudioFlinger or system-level mixers perform software volume attenuation, they directly modify the digital sample values [cite: 3, 4]. A digital attenuation of A dB decreases the effective bit depth (N 
+eff
+​
+ ) according to the mathematical relation:
+N 
+eff
+​
+ =N− 
+6.02
+A
+​
+ 
+This reduction destroys the least significant bits (LSBs), degrading a 24-bit high-resolution file to a much lower effective resolution before it ever arrives at the physical DAC [cite: 3, 4]. For audiophiles who seek bit-perfect reproduction—where the digital bits delivered to the conversion stage are a bit-for-bit identical replica of the original master file—standard Android audio routing represents a significant structural bottleneck [cite: 1, 3].
+Dedicated Transport Architectures in High-Fidelity DAPs
+To bypass these operating system limitations, high-fidelity portable Digital Audio Players (DAPs) implement proprietary system-level firmware modifications [cite: 7, 8, 9, 10]. At the core of these custom operating systems (typically derived from deeply customized forks of Android) is a system-wide bypass architecture [cite: 9, 11, 12]. HiBy's Direct Transport Audio (DTA) represents the primary template for this system-level routing [cite: 7, 10, 12]. Unlike standard consumer devices that rely on app-specific workarounds, DTA modifies the underlying Android audio framework binaries, including AudioFlinger and system configuration properties [cite: 10, 12]. By rewriting this framework, DTA allows the digital audio output of all applications (including third-party streaming platforms like Apple Music, Tidal, and Qobuz) to bypass the system's central resampler and mixer [cite: 9, 10, 12].
+If the player application itself does not perform resampling, the track is delivered bit-perfectly to the audio hardware [cite: 10]. The system's hardware clocks dynamically shift their physical oscillation frequencies to match the incoming source file, typically toggling between dual high-precision crystal oscillators:
+45.1584 MHz for the 44.1 kHz sample-rate family (44.1,88.2,176.4,352.8 kHz and DSD formats) [cite: 7, 13, 14].
+49.152 MHz for the 48 kHz sample-rate family (48,96,192,384 kHz) [cite: 7, 13, 14].
+This dual-oscillator hardware configuration ensures that the DAC is clocked using a low-jitter, native reference signal [cite: 7, 13]. However, not all DAPs support system-wide DTA [cite: 11]. Budget or entry-level units (such as the HiBy M300) may lack complete DTA integration due to processor or vendor HAL constraints [cite: 11, 15]. On such devices, internal speaker and 3.5 mm auxiliary outputs are often locked to a fixed high-resolution resampling rate (such as 192 kHz or 384 kHz at 24-bit) controlled by AudioFlinger [cite: 11, 15]. While this avoids downsampling, it is not bit-perfect [cite: 11, 15]. To obtain a bit-perfect stream on these non-DTA devices, users must connect an external USB DAC and utilize applications with custom user-space USB drivers [cite: 11, 16].
+A persistent challenge in modern Android deployment is operating system updates [cite: 1, 17]. For instance, on several high-performance smartphones (such as ASUS ROG series devices), system updates from Android 14 to Android 15 caused the native high-resolution output drivers to be stripped from standard speaker and direct audio pathways, reverting system routing back to a fixed 48 kHz limit [cite: 17]. This regression underscores the fragile nature of OEM modifications and emphasizes the need for independent, root-level control over the system's audio stack [cite: 17, 18].
+Asynchronous USB Transfer, Clock Jitter, and the Android 14 Bit-Perfect API
+When connecting external DACs, the communication protocol relies on USB Audio Class 2.0 (UAC2), which permits asynchronous audio transfer [cite: 5, 6, 14, 19]. Under asynchronous USB mode, the conversion clock timing is controlled exclusively by the downstream DAC rather than the electrically noisy host computer or phone motherboard [cite: 14, 19, 20]. The host-side operating system packs the digital samples into packets and transmits them over USB, while a feedback loop regulates the host's packet delivery rate to match the DAC's internal clock buffer [cite: 6, 19, 20, 21].
+The exact communication state can be monitored in real time by querying the kernel endpoint configuration at: /proc/asound/card1/stream0 This diagnostics path reports the active transmission mode, categorizing the endpoint as synchronous (SYNC), adaptive (ADAPTIVE), or asynchronous (ASYNC) [cite: 6]. True asynchronous operation requires an active feedback endpoint, allowing the external clock to govern data packet retrieval, which isolates the conversion stage from upstream host jitter [cite: 6, 14, 19, 20].
+Historically, bypassing standard Android audio constraints for external USB DACs required third-party audio players like USB Audio Player Pro (UAPP) or HiBy Music [cite: 1, 2, 16, 22]. These applications embed custom, proprietary user-space USB host drivers, which communicate directly with the USB controller, taking exclusive control of the USB endpoint and bypassing the standard Android framework entirely [cite: 1, 2, 16].
+With the release of Android 14, Google introduced a native API layer designed to bring system-level bit-perfect capabilities to USB audio outputs [cite: 23, 24]. Developers can configure audio paths using AudioManager.setPreferredMixerAttributes() with an AudioMixerAttributes class configured to MIXER_BEHAVIOR_BIT_PERFECT [cite: 23, 24]. When invoked by a supported app (such as Apple Music), the system bypasses standard AudioFlinger resamplers, global mixing, and DSP structures, transmitting the unmodified PCM, Master Quality Authenticated (MQA), or Direct Stream Digital (DSD) stream directly to the hardware HAL [cite: 5, 23, 24].
+However, this feature is not universally active on all Android 14+ devices [cite: 2, 5]. It relies on explicit vendor/OEM configuration inside the system's Audio HAL [cite: 5, 24]. The vendor must map dynamic mix ports to the USB device and declare the AUDIO_OUTPUT_FLAG_BIT_PERFECT flag inside usb_audio_policy_configuration.xml [cite: 24]. If this flag is omitted by the manufacturer, the operating system locks the USB connection to a default resampled rate, rendering the native API inactive [cite: 5].
+Furthermore, utilizing native bit-perfect drivers introduces severe hardware integration issues, particularly regarding volume regulation [cite: 4, 23]. Because digital volume attenuation modifies digital sample values and violates the bit-perfect requirement, software volume control must be entirely disabled in this mode [cite: 3, 4, 24]. In its absence, unless Android routes the master volume channel directly to the ALSA hardware gain controls (which standard AOSP does not support natively on external endpoints without custom vendor hooks), any USB DAC lacking physical controls defaults to full output power (0 dBFS), posing physical safety hazards to listeners using in-ear monitors [cite: 4, 23].
+Systemless Consumer Replication: Root-Level Architecture Modifications
+For enthusiasts running consumer Android smartphones with root privileges (obtained via Magisk, APatch, or KernelSU), reproducing the system-wide bit-perfect and high-performance audio routing of DAPs is highly achievable [cite: 25, 26, 27]. This requires systemless modifications targeting device-specific configuration files, vendor properties, and hardware registers [cite: 25, 27, 28].
+Modifying Audio Policies and Disabling Deep Buffer Path
+The core of system-level routing optimization lies in patching /vendor/etc/audio_policy_configuration.xml and /vendor/etc/usb_audio_policy_configuration.xml [cite: 29, 30]. The primary modification involves inserting dynamic dynamic mix ports and declaring native high-resolution profiles (e.g., 96 kHz,192 kHz,384 kHz at 24-bit or 32-bit depths) while attaching the AUDIO_OUTPUT_FLAG_BIT_PERFECT and AUDIO_OUTPUT_FLAG_DIRECT flags [cite: 24, 31].
+Additionally, the system's default deep buffer path must be deactivated [cite: 28, 31, 32]. Android allocates a deep buffer (typically around 200 ms) for standard media streams to conserve power by allowing the system processor to sleep longer between audio packet transfers [cite: 33, 34]. However, this path bypasses high-resolution direct streams and forces resampling inside AudioFlinger [cite: 31, 33]. By setting audio.deep_buffer.media=false in the system properties, the OS is forced to utilize the higher-quality primary or direct-PCM output paths, reducing processing overhead, minimizing jitter, and preserving native file parameters [cite: 28, 31, 32, 34].
+Systemless Optimization Properties
+Using tools like a systemless build.prop editor or dedicated Magisk/KernelSU modules, several kernel and audio-server properties can be injected to optimize scheduling and hardware DAC behaviors [cite: 6, 35]. Key properties include:
+af.resampler.quality: When bit-perfect playback is inactive (such as during system notifications or mixed streams), this property defines the interpolation algorithm used by AudioFlinger [cite: 6, 36]. Setting this property to its highest integer value (e.g., 7 or 8) elevates the resampling algorithm to a high-quality mastering standard [cite: 6, 36]. This configuration increases the stop-band attenuation of the sinc filter to 179 dB or 194 dB, eliminating audible aliasing distortions [cite: 6].
+vendor.audio.adm.buffering.ms: Under Qualcomm Aqstic and system audio drivers, this parameter controls the Audio Dispersion Manager (ADM) buffer size [cite: 6]. Tuning this down to 2 or 3 milliseconds forces tight scheduling bounds, reducing clock-timing jitter on physical output channels [cite: 6, 36, 37].
+persist.vendor.audio.hifi: For Snapdragon-based smartphones, setting this and similar properties to true activates a hardware-level HiFi mode coded into the Qualcomm SoC's Aqstic DAC system by Snapdragon developers, which is frequently disabled by default on consumer devices to conserve battery [cite: 26, 28, 38].
+Key Magisk and KernelSU Audio Modules
+Several community-developed modules implement these complex modifications systemlessly:
+NLSound (Snapdragon Audio Enhancer): A comprehensive audio optimization module designed for devices with Qualcomm Snapdragon chipsets [cite: 26, 27]. NLSound disables system-wide software-level Dynamic Range Control (DRC), limiters, and companders which degrade the soundstage of acoustic tracks [cite: 6, 27]. It interacts directly with the system's tinymix library and modifies the Audio Calibration Database (ACDB) files to disable artificial limits, unlocking direct PCM paths and lowering hardware latency [cite: 27].
+Hi-Res Audio Enabler: A universal module that systemlessly patches the device's default /vendor/etc XML audio configurations [cite: 25, 39]. It unlocks 24-bit and 32-bit floating-point support, modifies standard audio paths to expose high-resolution formats up to 192 kHz or 384 kHz, and adds custom configurations like hph-highquality-mode to the system's mixer paths [cite: 25, 27].
+Audio Misc Settings: A specialized optimization script that raises the AudioFlinger resampler quality system-wide, disables standard software volume listeners, and deactivates spatializer frameworks to maintain an untouched, low-jitter stream [cite: 6].
+Low-Level Hardware Interface Tuning via ALSA Utilities
+On rooted devices, the low-level Advanced Linux Sound Architecture (ALSA) mixer controls can be accessed via tinymix, a native command-line utility [cite: 27, 40, 41]. This enables direct, hardware-level calibration of the connected audio interface, completely bypassing the standard Android volume framework [cite: 27, 40].
+A prime use case is resolving the "half-volume limit" associated with the Apple USB-C to 3.5 mm DAC on Android devices [cite: 40]. When connected to standard Android phones, the Apple DAC initializes its hardware amplifier registers to 50% or lower due to non-standard USB class communication protocols [cite: 40]. By invoking root terminal commands, the user can override this limitation. The command syntax typically is: tinymix "DAC Volume" 100% or querying the mixer controls directly via: tinymix contents This enables setting the physical DAC hardware registers (such as Capture Volume or Headphone Volume) to their true electrical limits, bypassing system volume scaling limits and preserving full dynamic range without resorting to software pre-amplification [cite: 40, 42, 43].
+The table below catalogs key mixer parameters controlled via direct ALSA calls to optimize Snapdragon integrated hardware outputs when bypass routing is active [cite: 27, 42, 44].
+Parameter Target Control
+Native Value / State
+Optimized Target Value
+Functional Impact on Signal Path
+RX_HPH_PWR_MODE
+ULP (Ultra-Low Power)
+LOHIFI (Hi-Res Mode)
+Elevates bias currents to internal headphone amplifier stages, lowering total harmonic distortion (THD) under low-impedance loads [cite: 26].
+WSA_COMP1 Switch
+1 (Active Compression)
+0 (Deactivated)
+Disables hardware-level dynamic range compression on speakers to prevent tracking clipping and maintain transient envelope integrity [cite: 27, 44].
+WSA_COMP2 Switch
+1 (Active Compression)
+0 (Deactivated)
+Disables dynamic range compression on secondary channels to maintain stereo soundstage linearity [cite: 27, 44].
+ADC1 Volume
+4 (Attenuated)
+6 (Reference Gain)
+Adjusts input analog gain stages directly at the hardware registers, matching signal-to-noise ratios of analog input routes [cite: 42].
+MultiMedia1 Mixer PRI_TDM_RX_0
+0 (Disabled)
+1 (Active Route)
+Maps the primary digital audio transmission path directly to standard time-division multiplexing hardware lines, bypassing framework mixers [cite: 44].
+Comparative Technical Matrix of Audio Configurations
+The table below contrasts standard consumer environments with specialized high-fidelity architectures to evaluate routing, processing overhead, and physical implementation mechanics [cite: 1, 5, 9, 12].
+Architectural Domain
+Standard Android Smartphone
+Audiophile Dedicated DAP (e.g., HiBy OS)
+Optimized Consumer Rooted Platform
+System-wide Sample Rate Control
+Forced resampling via AudioFlinger to 48 kHz [cite: 1, 2, 3]
+Direct Transport Audio (DTA) dynamic rate mapping [cite: 7, 9, 12]
+Modified hardware policies targeting native direct streams [cite: 25, 31]
+USB Interface Execution
+Shared USB interface using host-controlled packets [cite: 1, 2]
+Dedicated asynchronous USB host controller [cite: 7, 12]
+Monitored ASYNC endpoint via /proc/asound [cite: 6]
+Master Clock Synchronization
+Host software PLL clock recovery [cite: 14, 19]
+Dual physical high-precision oscillators [cite: 7, 13]
+Asynchronous external DAC re-clocking [cite: 6, 14, 19]
+Framework DSP Overhead
+Active compression, limiting, and spatial modules [cite: 6]
+Bypassed processing paths [cite: 7, 12]
+Excluded effects framework via systemless patches [cite: 6]
+Audio Latency Performance
+High latency (200 ms deep buffer) [cite: 33, 34]
+Low-latency hardware queues [cite: 12, 27]
+Reduced latency via deep buffer deactivation [cite: 28, 32, 34]
+Volume Resolution Controls
+15 digital steps modifying source bits [cite: 3, 4, 6]
+Independent analog resistor volume networks [cite: 7, 13]
+Custom 100 step volume profiles and direct tinymix gain [cite: 6, 40]
+The physical parameters that distinguish various optimization properties injected into standard Android system databases to mirror DAP-grade performance are classified in the table below [cite: 6, 28, 45, 46].
+Optimization System Parameter
+Core Property Tag
+Ideal Value
+Architectural Function and Auditory Impact
+Resampler Filter Quality
+af.resampler.quality
+7 [cite: 6, 36]
+Enforces mastering-grade Sinc interpolation filtering inside native mixing algorithms, maintaining low distortion [cite: 6].
+High-Performance Audio Mode
+persist.vendor.audio.hifi
+true [cite: 38]
+Unlocks dedicated low-noise, high-bias operating parameters on Qualcomm SoC platforms [cite: 26].
+Integrated Audio Codec Route
+persist.vendor.audio.hifi.int_codec
+true [cite: 38, 46]
+Bypasses standard codec pipelines, forcing high-bit-depth PCM routing directly to physical outputs [cite: 38, 46].
+PCM Offload Width
+audio.offload.pcm.24bit.enable
+true [cite: 45, 47]
+Instructs the Audio HAL to accept full 24-bit streams on compressed and offloaded direct lines [cite: 45, 47].
+Buffer Dispersal Metric
+vendor.audio.adm.buffering.ms
+2 [cite: 6, 36, 37]
+Restricts the delay footprint of the Audio Dispersion Manager to lower clock timing jitter [cite: 6].
+Direct Speaker Path
+audio.deep_buffer.media
+false [cite: 28, 31, 32]
+Prevents the operating system from defaulting to power-saving, high-latency mixed pipelines [cite: 31, 33].
+Engineering Conclusions and Systematic Optimization Roadmap
+To successfully replicate the specialized high-fidelity audio environment of dedicated DAPs on a rooted consumer Android device running KernelSU or Magisk, a rigorous, methodical modification roadmap must be executed [cite: 25, 26, 27]. This process demands systemless configuration adjustments to direct audio hardware endpoints, bypassing the default resamplers of standard Android architectures while preventing hardware-level volume hazards [cite: 4, 23, 24].
+Phase 1: Patching HAL Policies and Core XML Topologies
+The first phase requires establishing bit-perfect paths inside the core XML files. This is accomplished systemlessly by creating a Magisk or KernelSU override directory targeting /vendor/etc [cite: 25, 29]. The usb_audio_policy_configuration.xml file must be parsed to define custom mixPorts [cite: 24]. The addition of a dedicated hifi_output node, with the explicit declaration of AUDIO_OUTPUT_FLAG_BIT_PERFECT and support for high-resolution sampling rates (44.1,48,88.2,96,176.4,192,352.8,384 kHz) and format depths (AUDIO_FORMAT_PCM_24_BIT_PACKED and AUDIO_FORMAT_PCM_32_BIT), forces the audio framework to maintain bitstream integrity when supported applications claim direct access [cite: 24].
+<!-- Example HAL modification snippet (conceptual implementation) -->
+<mixPort name="hifi_output" role="source" flags="AUDIO_OUTPUT_FLAG_BIT_PERFECT">
+    <profile name="" format="AUDIO_FORMAT_PCM_32_BIT"
+             samplingRates="44100,48000,88200,96000,176400,192000,352800,384000"
+             channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
+</mixPort>
+Phase 2: Eliminating Framework DSP and Buffering Impedance
+The second phase involves purifying the signal path by setting targeted properties in /system/build.prop or via a systemless properties module [cite: 6, 35]. Deactivating the standard deep buffer path (audio.deep_buffer.media=false) eliminates the standard 200 ms mixing buffer, bypassing standard resamplers [cite: 28, 31, 32].
+To prevent systemic digital compression, all software-based limiting mechanisms must be bypassed [cite: 6]. This is achieved by:
+Setting af.resampler.quality=7 to lock native resamplers to their highest mathematical limits when mixed streams occur [cite: 6, 36].
+Injecting vendor.audio.adm.buffering.ms=2 to ensure the audio hardware operates on a rapid, tightly scheduled queue, minimizing the jitter caused by CPU scheduling delays [cite: 6].
+Disabling system-level spatializers, sound dose frameworks, and preinstalled Dolby libraries that dynamically compress transient peaks in the background [cite: 6].
+Phase 3: Calibrating Physical Hardware Registers
+The final phase addresses hardware gain optimization and electrical interface tuning [cite: 27, 40]. When the system is configured to run bit-perfect streams, standard software-level volume sliders are bypassed, forcing external USB DACs to initialize at maximum output, which poses risks to both sensitive transducer components and human ears [cite: 4, 23, 24].
+To safely resolve this, the system volume step engine should be expanded to its maximum resolution (e.g., configuring ro.config.media_vol_steps=100 instead of the standard 15-step arrangement) to allow for fine adjustments [cite: 6, 28].
+For DACs with restricted output ranges (such as the Apple USB-C to 3.5 mm interface), direct terminal interactions using tinymix are necessary [cite: 40]. Executing a startup script with superuser privileges that sets physical registers (tinymix "DAC Volume" 100%) guarantees that the external DAC operates at its true electrical potential, preventing premature digital clipping and maintaining full dynamic range [cite: 40, 42].
+By systematically implementing this multi-layered architectural optimization, a standard consumer Android device can completely bypass standard constraints, mirroring the precise, bit-perfect, low-jitter transport execution of dedicated audiophile players [cite: 10, 12, 26].
+--------------------------------------------------------------------------------
+Android Devices Are Turning Lossless Streams Lossy on Spotify, Tidal, Qobuz, and More, Based on New Tests | Headphonesty, https://www.headphonesty.com/2025/10/android-devices-lossless-streams-spotify-tidal-qobuz/
+How Android handles Hi-Res audio: An audiophile's guide to the best sound, https://www.androidauthority.com/android-audiophile-guide-3611225/
+Bit-Perfect Audio on Android: Myth vs Reality - Echobox, https://ombs.io/guides/bit-perfect-playback-android/
+ARC bit-perfect in Android phone! [To External USB-DAC] - Page 8 - Roon Labs Community, https://community.roonlabs.com/t/arc-bit-perfect-in-android-phone-to-external-usb-dac/224694?page=8
+Confirmed: Android CAN dynamically switch USB DAC sample rates (No root, no UAPP, ROM-dependent) - Reddit, https://www.reddit.com/r/Iemaudiophiles/comments/1pn1l8x/confirmed_android_can_dynamically_switch_usb_dac/
+GitHub - Magisk-Modules-Alt-Repo/audio-misc-settings: A Magisk module for setting miscellaneous audio configuration values (media audio volume steps (100 steps), raising the resampling quality, disabling the effects framework, etc.), https://github.com/Magisk-Modules-Alt-Repo/audio-misc-settings
+HiBy RS8 II Ultra-Flagship Portable HiFi Player Released - TechPowerUp, https://www.techpowerup.com/342715/hiby-rs8-ii-ultra-flagship-portable-hifi-player-released
+Hiby – Home | Bad Guy Good Audio Reviews, https://badguygoodaudioreviews.com/tag/hiby/
+Cayin N6III Review - Headfonia, https://www.headfonia.com/cayin-n6-iii-review/2/
+Does Apple Music support USB DAC bypass on Android? : r/AppleMusic - Reddit, https://www.reddit.com/r/AppleMusic/comments/oqe2lf/does_apple_music_support_usb_dac_bypass_on_android/
+HiBy M300 (Android 13): can HiByMusic do bit-perfect to the CS43131 internal DAC, or is it always resampled? - Reddit, https://www.reddit.com/r/Hiby/comments/1q52c2l/hiby_m300_android_13_can_hibymusic_do_bitperfect/
+HiBy R4 QUICK GUIDE, https://track.hiby.com/Manual/Find?p=R4&l=en
+HiBy RS8 II Ultra-Flagship Portable HiFi Player Released | TechPowerUp Forums, https://www.techpowerup.com/forums/threads/hiby-rs8-ii-ultra-flagship-portable-hifi-player-released.342715/
+Clock Jitter and Audio Quality - AUDIOPROBE Inc., http://audio-probe.com/en/documentation/clock-jitter-and-audio-quality/
+HiBy M300 + HiByMusic on Android 13 — is internal DAC playback actually bit-perfect, or still resampled? - Reddit, https://www.reddit.com/r/DigitalAudioPlayer/comments/1q52bh7/hiby_m300_hibymusic_on_android_13_is_internal_dac/
+Android 10 USB output quality? - DAC - Digital to Analog Conversion - Audiophile Style, https://audiophilestyle.com/forums/topic/61932-android-10-usb-output-quality/
+I'm hoping that Android15 can restore the ability for lossless audio output directly through the speaker, without undergoing SRC, just like it was possible on previous Android versions. - Poweramp Forum, https://forum.powerampapp.com/topic/29326-im-hoping-that-android15-can-restore-the-ability-for-lossless-audio-output-directly-through-the-speaker-without-undergoing-src-just-like-it-was-possible-on-previous-android-versions/
+Feature Request: Root-Level Control of Android Audio Stack for Bit-Perfect Playback, https://forum.powerampapp.com/topic/30651-feature-request-root-level-control-of-android-audio-stack-for-bit-perfect-playback/
+USB DAC settings for use with iFi Zen Streamer? Async or sync? - Roon Labs Community, https://community.roonlabs.com/t/usb-dac-settings-for-use-with-ifi-zen-streamer-async-or-sync/228591
+Unlocking the Hidden performance in Networked Hi-Fi systems - Part 1, https://dacmanaudio.com.au/unlocking-the-hidden-performance-in-networked-hi-fi-systems/
+Most effective way to remove jitter | AudioShark Forums - High End Audio, Stereo and Home Theater Systems Discussions, https://www.audioshark.org/threads/most-effective-way-to-remove-jitter.22427/
+Android - Bypass Sample Rate Conversion (SRC) - Like in UAPP App, https://community.roonlabs.com/t/android-bypass-sample-rate-conversion-src-like-in-uapp-app/91962
+Feature Request: Bit-Perfect USB Audio Passthrough (Android 14+) · Issue #1210 - GitHub, https://github.com/OxygenCobalt/Auxio/issues/1210
+Preferred mixer attributes on USB devices - Android Open Source Project, https://source.android.com/docs/core/audio/preferred-mixer-attr
+Hi-Res-Audio-Enabler-Magisk-Module/README.md at main - GitHub, https://github.com/reiryuki/Hi-Res-Audio-Enabler-Magisk-Module/blob/main/README.md
+[Magisk Module] Enable Hidden HiFi Audio Mode + More Sound Improvements for the Built-in Audio Dac - Reddit, https://www.reddit.com/r/SonyXperia/comments/1kf3sge/magisk_module_enable_hidden_hifi_audio_mode_more/
+GitHub - Briclyaz/NLSound_module_QCom: The best all-in-one solution available today to comprehensively improve your smartphone's audio quality at the system level, as well as fix various issues related to lousy microphone recording quality!, https://github.com/Briclyaz/NLSound_module_QCom
+Build PROP | PDF | Android (Operating System) | Equalization (Audio) - Scribd, https://www.scribd.com/document/635956528/buildPROP
+Configure audio policies - Android Open Source Project, https://source.android.com/docs/core/audio/implement-policy
+Requests for Hi-Res Support (please state which build of Poweramp you are using) - Page 63, https://forum.powerampapp.com/topic/8735-requests-for-hi-res-support-please-state-which-build-of-poweramp-you-are-using/page/63/
+Forced 48 khz Android resample and DEEP_BUFFER enforced flag on Hi-Res output log, https://forum.powerampapp.com/topic/22229-forced-48-khz-android-resample-and-deep_buffer-enforced-flag-on-hi-res-output-log/
+Lycan Audio Quality Tweaks Guide | PDF - Scribd, https://www.scribd.com/document/745719738/AudioUHD-Dolby-Part-1-5-LycanTweaks
+Diff - 439e4ed^! - platform/frameworks/av - Git at Google - Android GoogleSource, https://android.googlesource.com/platform/frameworks/av/+/439e4ed%5E%21/
+[BOUNTY OFFER] $100 to the First Person to Release a .SH Script to Resize the Audio Buffer and Reduce the 200ms Audio Latency : r/retroid - Reddit, https://www.reddit.com/r/retroid/comments/12d35mn/bounty_offer_100_to_the_first_person_to_release_a/
+A Magisk Module that Allow you To Change , Edit or modify System & vendor build.prop Contents Systemlessly - GitHub, https://github.com/araafroyall/Systemless-build.prop
+system.prop-workaround - audio-misc-settings - GitHub, https://github.com/Magisk-Modules-Alt-Repo/audio-misc-settings/blob/master/system.prop-workaround
+vendor.prop · 8e7cc185e3f103fc685475c6753bffdef61923cb · CalyxOS / device_motorola_sm6225-common - GitLab, https://gitlab.com/CalyxOS/device_motorola_sm6225-common/-/blob/8e7cc185e3f103fc685475c6753bffdef61923cb/vendor.prop
+Build.prop — улучшение качества звука - Habr, https://habr.com/ru/articles/660151/
+GitHub - adivenxnataly/Hi-ResAudio: Enable Hi-Res Audio for MediaTek only, up to 32-bit/192kHz (if device supports)., https://github.com/adivenxnataly/Hi-ResAudio
+[Other] Apple USB-C to 3.5mm Headphone Jack Adapter - $6.98 : r/buildapcsales - Reddit, https://www.reddit.com/r/buildapcsales/comments/1eclc4h/other_apple_usbc_to_35mm_headphone_jack_adapter/
+hasanbulat/tinyalsa-ndk: Tiny library to interface with ALSA in the Linux kernel - GitHub, https://github.com/hasanbulat/tinyalsa-ndk
+A White Paper on a Selection of Intrinsyc's Audio Technology Engineering Services, https://www.lantronix.com/blog/a-white-paper-on-a-selection-of-intrinsycs-audio-technology-engineering-services/
+ALSA on x86 - No sound - Google Groups, https://groups.google.com/g/android-porting/c/WsJgY5nhNNY
+QCMM - Qualcomm Support, https://mysupport.qualcomm.com/supportforums/s/topic/0TOdK0000001V1lWAE/qcmm
+Requests for Hi-Res Support (please state which build of Poweramp you are using), https://forum.powerampapp.com/topic/8735-requests-for-hi-res-support-please-state-which-build-of-poweramp-you-are-using/
+android_device_xiaomi_sdm710-common/vendor.prop at 12.0 - GitHub, https://github.com/crdroidandroid/android_device_xiaomi_sdm710-common/blob/12.0/vendor.prop
+Pioneer XDP-300R: Root, TWRP Recovery, Magisk, and other mods - Audio Discourse, https://www.audiodiscourse.com/2019/02/pioneer-xdp-300r-root-twrp-recovery.html

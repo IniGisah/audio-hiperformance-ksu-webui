@@ -12,20 +12,25 @@ fi
 REPLACE=""
 REPLACEFILES=""
 
-# Ensure system directory & marker file exist for ZeroMount VFS auto-loading on boot
+# Ensure system directory, marker file, and mode.conf exist
 mkdir -p "$MODPATH/system/etc"
 echo "# Audio Misc. Settings ZeroMount Target Marker" > "$MODPATH/system/etc/audio_misc_settings.conf"
 chmod 644 "$MODPATH/system/etc/audio_misc_settings.conf"
 
+if [ ! -f "$MODPATH/mode.conf" ]; then
+    echo "MODE=audiophile" > "$MODPATH/mode.conf"
+fi
+chmod 644 "$MODPATH/mode.conf"
+
 # Make patched ALSA utility and Tensor's offload libraries for "ro.audio.usb.period_us"
 makeLibraries
-nullifySoundFx
 
-# Remove post-A13 (especially Tensor's) spatial audio flags in an audio configuration file for avoiding errors
+# Remove spatial audio flags, disable DRC, and inject bit-perfect profiles into audio policy configs
 deSpatializeAudioPolicyConfig "/vendor/etc/bluetooth_audio_policy_configuration_7_0.xml"
+disableDrcAudioPolicyConfig "/vendor/etc/audio_policy_configuration.xml"
+patchBitPerfectAudioPolicyConfig "/vendor/etc/usb_audio_policy_configuration.xml"
 
-# Disable pre-installed Moto Dolby faetures and Wellbeing for reducing very large jitter caused by them
-#   Excluded "MotorolaSettingsProvider" on Motorala devices only for avoiding their bootloop
+# Disable pre-installed Moto Dolby features and Wellbeing on Motorola devices only
 if [ "`getprop ro.product.manufacturer`" = "motorola" ]; then
     disablePrivApps "
 /system_ext/priv-app/MotoDolbyDax3
@@ -37,26 +42,12 @@ if [ "`getprop ro.product.manufacturer`" = "motorola" ]; then
 /system_ext/priv-app/WellbeingPrebuilt
 /system_ext/priv-app/Wellbeing
 "
-
-else
-    disablePrivApps "
-/system_ext/priv-app/MotoDolbyDax3
-/system_ext/priv-app/MotorolaSettingsProvider
-/system_ext/priv-app/daxService
-/system_ext/priv-app/DaxUI
-/system_ext/app/MotoSignatureApp
-/product/priv-app/WellbeingPrebuilt
-/product/priv-app/Wellbeing
-/system_ext/priv-app/WellbeingPrebuilt
-/system_ext/priv-app/Wellbeing
-"
-
 fi
 
 if "$IS64BIT"; then
     board="`getprop ro.board.platform`"
     case "$board" in
-        zuma* | "pineapple"  )
+        sun* | "pineapple" | zuma* | mt69* )
             replaceSystemProps_VHPerf
             ;;
         "kona" | "kalama" | "shima" | "yupik" )
@@ -78,7 +69,7 @@ if "$IS64BIT"; then
             replaceSystemProps_Others
             ;;
         * )
-            replaceSystemProps_Others
+            replaceSystemProps_VHPerf
             ;;
     esac
     

@@ -30,7 +30,7 @@
         </div>
       </div>
       <div class="header-actions">
-        <span class="badge version-badge">v1.0.0</span>
+        <span class="badge version-badge">v1.3.0</span>
         <span id="status-badge" class="badge status-badge loading">Checking...</span>
       </div>
     </header>
@@ -49,10 +49,38 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
         Set 100 Volume Steps
       </button>
+      <button id="btn-tinymix-hw" class="btn btn-tertiary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Apply ALSA Hardware Gain
+      </button>
     </section>
 
     <!-- Metrics Overview Grid -->
     <main class="dashboard-grid">
+      <!-- Profile & Power Management Card (NEW) -->
+      <div class="card card-profile full-width profile-card-highlight">
+        <div class="card-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <h3>Dynamic Audio Profile & Power Management</h3>
+          <span id="active-mode-badge" class="badge mode-badge">Audiophile Mode</span>
+        </div>
+        <div class="card-body profile-body">
+          <div class="profile-desc">
+            <p>Switch dynamically between <strong>Audiophile Hi-Fi Mode</strong> (mastering-grade PSD resampler, 179 dB stop-band attenuation, 24-bit offload, zero-jitter ADM buffer, deep buffer bypass, LOHIFI headphone bias) and <strong>Power Saver Mode</strong> (re-enables deep buffer for 200ms CPU sleep cycles, mid-grade resampler, quick hardware standby for maximum battery life).</p>
+          </div>
+          <div class="profile-actions">
+            <button id="btn-mode-audiophile" class="btn btn-mode btn-mode-audiophile active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              Audiophile Hi-Fi Mode
+            </button>
+            <button id="btn-mode-power-saver" class="btn btn-mode btn-mode-powersaver">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="18" height="12" rx="2"/><line x1="23" y1="10" x2="23" y2="14"/></svg>
+              Power Saver / Stock Mode
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Card 1: Live Audio Output & DAC/Bluetooth Session -->
       <div class="card card-output full-width Highlight-card">
         <div class="card-header">
@@ -100,6 +128,18 @@
             <span id="prop-resampler-quality" class="prop-val">Loading...</span>
           </div>
           <div class="prop-row">
+            <span class="prop-name">HiFi Int Codec Route</span>
+            <span id="prop-int-codec" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">ADM Jitter Buffer</span>
+            <span id="prop-adm-buffering" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">Deep Buffer Bypass</span>
+            <span id="prop-deep-buffer" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
             <span class="prop-name">Effects Framework</span>
             <span id="prop-effects-status" class="prop-val">Loading...</span>
           </div>
@@ -114,6 +154,18 @@
           <div class="prop-row">
             <span class="prop-name">USB Transfer Period</span>
             <span id="prop-usb-period" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">24-bit PCM Offload</span>
+            <span id="prop-offload-24bit" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">PSD Resampler Stopband</span>
+            <span id="prop-psd-stopband" class="prop-val">Loading...</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-name">AudioFlinger Standby</span>
+            <span id="prop-flinger-standby" class="prop-val">Loading...</span>
           </div>
         </div>
       </div>
@@ -132,6 +184,10 @@
           <div class="info-block">
             <span class="info-label">Audioserver Process:</span>
             <span id="info-audioserver-pid" class="info-value text-mono">Checking...</span>
+          </div>
+          <div class="info-block">
+            <span class="info-label">ALSA Hardware Register:</span>
+            <span id="prop-tinymix-status" class="info-value text-mono">Checking...</span>
           </div>
           <div class="info-block">
             <span class="info-label">SoC Platform:</span>
