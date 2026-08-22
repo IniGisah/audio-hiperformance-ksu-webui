@@ -6,6 +6,10 @@ MODDIR="${0%/*}"
 which_resetprop_command() {
     if type resetprop 1>"/dev/null" 2>&1; then
         echo "resetprop"
+    elif [ -x "/data/adb/magisk/magisk" ]; then
+        echo "/data/adb/magisk/magisk resetprop"
+    elif [ -x "/data/adb/magisk/resetprop" ]; then
+        echo "/data/adb/magisk/resetprop"
     elif [ -x "/data/adb/ksu/bin/resetprop" ]; then
         echo "/data/adb/ksu/bin/resetprop"
     elif [ -x "/data/adb/ap/bin/resetprop" ]; then
@@ -47,19 +51,32 @@ cleanup_audio_settings() {
             audio.safemedia.bypass \
             audio.safemedia.force \
             audio.safemedia.csd.force \
-            vendor.audio.flac.sw.decoder.24bit \
-            ro.config.media_vol_steps \
             af.resampler.quality \
             ro.audio.resampler.psd.enable_at_samplerate \
             ro.audio.resampler.psd.stopband \
             ro.audio.resampler.psd.halflength \
             ro.audio.resampler.psd.tbwcheat \
+            ro.audio.resampler.psd.cutoff_percent \
             audio.offload.pcm.24bit.enable \
+            ro.audio.usb.period_us \
+            vendor.audio_hal.period_multiplier \
             ro.audio.flinger_standbytime_ms; do
             "$resetprop_cmd" -p --delete "$prop" 1>/dev/null 2>&1
             "$resetprop_cmd" --delete "$prop" 1>/dev/null 2>&1
         done
     fi
+
+    # Unmount and delete on-the-fly generated audio policy XML overlay
+    for target in "/vendor/etc/audio_policy_configuration.xml" \
+                  "/vendor/etc/usb_audio_policy_configuration.xml" \
+                  "/vendor/etc/audio/audio_module_config_primary.xml" \
+                  "/system/vendor/etc/audio_policy_configuration.xml" \
+                  "/system/vendor/etc/usb_audio_policy_configuration.xml"; do
+        if grep -q "$target" /proc/self/mountinfo 2>/dev/null; then
+            umount "$target" 1>/dev/null 2>&1
+        fi
+    done
+    rm -f "/data/local/tmp/audio_conf_generated.xml" "/data/local/tmp/audio_primary_generated.xml" 1>/dev/null 2>&1
 
     # 2. Restart Tensor AOC daemons if stopped
     setprop ctl.start aocd 1>/dev/null 2>&1
@@ -71,7 +88,6 @@ cleanup_audio_settings() {
         tinymix "WSA_COMP1 Switch" 1 1>/dev/null 2>&1
         tinymix "WSA_COMP2 Switch" 1 1>/dev/null 2>&1
         tinymix "ADC1 Volume" 4 1>/dev/null 2>&1
-        tinymix "MultiMedia1 Mixer PRI_TDM_RX_0" 0 1>/dev/null 2>&1
     fi
 
     # 4. Re-enable packages if disabled on Motorola
@@ -82,7 +98,20 @@ cleanup_audio_settings() {
     # 5. Delete system volume steps setting
     settings delete system volume_steps_music 1>/dev/null 2>&1
 
-    # 6. Restart audioserver
+    # 6. Restart audioserver & audio HAL daemons
+    if [ -n "$(getprop init.svc.vendor.audio-hal-aidl)" ]; then
+        setprop ctl.restart "vendor.audio-hal-aidl" 1>/dev/null 2>&1
+    fi
+    if [ -n "$(getprop init.svc.audiohalservice.qti)" ]; then
+        setprop ctl.restart "audiohalservice.qti" 1>/dev/null 2>&1
+    fi
+    if [ -n "$(getprop init.svc.audiohalservice)" ]; then
+        setprop ctl.restart "audiohalservice" 1>/dev/null 2>&1
+    fi
+    if [ -n "$(getprop init.svc.vendor.audio-hal)" ]; then
+        setprop ctl.restart "vendor.audio-hal" 1>/dev/null 2>&1
+    fi
+
     if [ -n "$(getprop init.svc.audioserver)" ]; then
         setprop ctl.restart audioserver
         sleep 1.2

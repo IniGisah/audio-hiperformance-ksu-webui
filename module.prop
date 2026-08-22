@@ -1,6 +1,7 @@
 id=audio-misc-settings-ksu-webui
 name=Audio misc. settings + WebUI
-version=v2.1.0
-versionCode=210
+version=v3.0.0
+versionCode=300
 author=zyhk, Chthome Luii & Gemini
-description=Audiophile audio engine (100 volume steps, resampler quality 7, zero-jitter USB DAC, 2ms ADM buffer, deep buffer bypass, HyperOS safe pure pass-through) + Real-Time WebUI (Dynamic Audiophile vs Power Saver Profile Switcher, ALSA tinymix hardware gain, LDAC/aptX/AAC status)
+description=Universal Audiophile Engine for Magisk, KernelSU, KernelSU Next & APatch with WebUI (KSU / KsuWebUIStandalone / MMRL), Magisk Action Button, On-The-Fly Sample Rate (up to 768kHz) & Bit Depth Switcher, 96kHz Unlocker, DRC Toggles, 100 Volume Steps, & Terminal CLI (audiomisc).
+updateJson=https://raw.githubusercontent.com/IniGisah/audio-hiperformance-ksu-webui/master/update.json

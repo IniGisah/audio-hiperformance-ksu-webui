@@ -152,6 +152,7 @@ function patchMapProperty()
     local new_prop='vendor.audio.usb.perio'
     
     if [ $# -eq 2  -a  -r "$1" ]; then
+        mkdir -p "${2%/*}"
         local pat1=`toHexString "$orig_prop"`
         local pat2=`toHexString "$new_prop" ${#pat1}`
       
@@ -182,6 +183,7 @@ function patchClearLock()
     local new_rates='192000  176400  96000  88200  48000  44100  32000  24000  22050  16000  12000  11025  8000'
     
     if [ $# -ge 2  -a  -r "$1" ]; then
+        mkdir -p "${2%/*}"
         if [ $# -gt 2 ]; then
             case "$3" in
                 "max" )
@@ -231,6 +233,7 @@ function patchClearTensorOffloadLock()
     local new_rates='768000  705600  384000  352800  192000  176400  96000  88200  48000  44100  8000'
 
     if [ $# -ge 2  -a  -r "$1" ]; then
+        mkdir -p "${2%/*}"
         local pat1=`toHexLineLE "$orig_rates"`
         local pat2=`toHexLineLE "$new_rates"`
 
@@ -268,9 +271,11 @@ function install_mod_file()
     if [ "$src" = "null" ]; then
         cp /dev/null "$dst"
     fi
-    chmod 644 "$dst"
-    chcon "$secon" "$dst"
-    chown root:root "$dst"
+    if [ -e "$dst" ]; then
+        chmod 644 "$dst"
+        chcon "$secon" "$dst"
+        chown root:root "$dst"
+    fi
     chmod -R a+rX "${dst%/*}"
 }
 
@@ -325,6 +330,7 @@ function makeUnlockedLibraries()
         for lname in "libalsautils.so" "libalsautilsv2.so"; do
             if [ -r "${VENDORDIR}/${d}/${lname}" ]; then
                 dst="${MODPATH}/system/vendor/${d}/${lname}"
+                mkdir -p "${dst%/*}"
                 patchClearLock "${VENDORDIR}/${d}/${lname}" "$dst" "max"
                 install_mod_file "patched" "$dst"
                 append_replacefile "/system/vendor/${d}/${lname}"
@@ -333,6 +339,7 @@ function makeUnlockedLibraries()
         for lname in "audio_usb_aoc.so"; do
             if [ -r "${VENDORDIR}/${d}/${lname}" ]; then
                 dst="${MODPATH}/system/vendor/${d}/${lname}"
+                mkdir -p "${dst%/*}"
                 patchClearTensorOffloadLock "${VENDORDIR}/${d}/${lname}" "$dst"
                 install_mod_file "patched" "$dst"
                 append_replacefile "/system/vendor/${d}/${lname}"
@@ -475,7 +482,29 @@ function replaceSystemProps_SDM845()
 
 function replaceSystemProps_SDM()
 {
-    :
+    sed -i \
+        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
+        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
+            "$MODPATH/system.prop"
+    sed -i \
+        -e 's/vendor\.audio\.usb\.perio=.*$/vendor\.audio\.usb\.perio=2000/' \
+        -e 's/vendor\.audio\.usb\.out\.period_us=.*$/vendor\.audio\.usb\.out\.period_us=2000/' \
+            "$MODPATH/system.prop-workaround"
+}
+
+function patchPlatformConfig()
+{
+    local VENDORDIR="$(getVendorDir)"
+    if [ -z "$VENDORDIR" ]; then return 1; fi
+    local fname="${VENDORDIR}/etc/audio_platform_configuration.xml"
+    if [ -r "$fname" ]; then
+        local dst="${MODPATH}/system/vendor/etc/audio_platform_configuration.xml"
+        mkdir -p "${dst%/*}"
+        sed -e 's/min_rate="[1-9][0-9]*"/min_rate="44100"/g' \
+            -e 's/"MaxSamplingRate=[1-9][0-9]*,/"MaxSamplingRate=192000,/' "$fname" > "$dst"
+        install_mod_file "patched" "$dst" "u:object_r:vendor_configs_file:s0"
+        append_replacefile "/system/vendor/etc/audio_platform_configuration.xml"
+    fi
 }
 
 function replaceSystemProps_MTK_Dimensity()

@@ -7,6 +7,10 @@ function which_resetprop_command()
 {
     if type resetprop 1>"/dev/null" 2>&1; then
         echo "resetprop"
+    elif [ -x "/data/adb/magisk/magisk" ]; then
+        echo "/data/adb/magisk/magisk resetprop"
+    elif [ -x "/data/adb/magisk/resetprop" ]; then
+        echo "/data/adb/magisk/resetprop"
     elif [ -x "/data/adb/ksu/bin/resetprop" ]; then
         echo "/data/adb/ksu/bin/resetprop"
     elif [ -x "/data/adb/ap/bin/resetprop" ]; then
@@ -51,6 +55,11 @@ function additionalSettings()
     MODDIR="${0%/*}"
     if [ -f "$MODDIR/set_audio_mode.sh" ]; then
         sh "$MODDIR/set_audio_mode.sh" apply >/dev/null 2>&1
+    fi
+
+    # Apply active Sample Rate, Bit Depth, & Policy Overlay
+    if [ -f "$MODDIR/set_audio_samplerate.sh" ] && [ -f "$MODDIR/samplerate.conf" ]; then
+        sh "$MODDIR/set_audio_samplerate.sh" apply >/dev/null 2>&1
     fi
 }
 

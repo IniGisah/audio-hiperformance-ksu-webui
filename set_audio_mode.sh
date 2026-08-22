@@ -11,14 +11,27 @@ SCRIPT_DIR="${0%/*}"
 CONF_FILE=""
 for p in "$SCRIPT_DIR/mode.conf" \
          "/data/adb/modules/audio-misc-settings-ksu-webui/mode.conf" \
+         "/data/adb/modules_update/audio-misc-settings-ksu-webui/mode.conf" \
          "/data/adb/modules/audio-misc-settings/mode.conf" \
          "/data/adb/ksu/modules/audio-misc-settings-ksu-webui/mode.conf" \
          "/data/adb/ap/modules/audio-misc-settings-ksu-webui/mode.conf"; do
-    if [ -w "$p" ] || [ -w "${p%/*}" ]; then
+    if [ -f "$p" ]; then
         CONF_FILE="$p"
         break
     fi
 done
+
+if [ -z "$CONF_FILE" ]; then
+    for p in "$SCRIPT_DIR/mode.conf" \
+             "/data/adb/modules/audio-misc-settings-ksu-webui/mode.conf" \
+             "/data/adb/modules_update/audio-misc-settings-ksu-webui/mode.conf" \
+             "/data/adb/modules/audio-misc-settings/mode.conf"; do
+        if [ -w "${p%/*}" ]; then
+            CONF_FILE="$p"
+            break
+        fi
+    done
+fi
 
 if [ -z "$CONF_FILE" ]; then
     CONF_FILE="$SCRIPT_DIR/mode.conf"
@@ -27,6 +40,10 @@ fi
 which_resetprop() {
     if type resetprop >/dev/null 2>&1; then
         echo "resetprop"
+    elif [ -x "/data/adb/magisk/magisk" ]; then
+        echo "/data/adb/magisk/magisk resetprop"
+    elif [ -x "/data/adb/magisk/resetprop" ]; then
+        echo "/data/adb/magisk/resetprop"
     elif [ -x "/data/adb/ksu/bin/resetprop" ]; then
         echo "/data/adb/ksu/bin/resetprop"
     elif [ -x "/data/adb/ap/bin/resetprop" ]; then
@@ -58,33 +75,58 @@ delete_prop() {
     fi
 }
 
+# Reload all audio services in exact dependency order
+reloadAudioServers() {
+    local i
+    for i in $(seq 1 3); do
+        if [ "$(getprop sys.boot_completed)" = "1" ] && [ -n "$(getprop init.svc.audioserver)" ]; then
+            break
+        fi
+        sleep 0.2
+    done
+
+    # Restart AIDL/HIDL audio HAL services before audioserver
+    if [ -n "$(getprop init.svc.vendor.audio-hal-aidl)" ]; then
+        setprop ctl.restart "vendor.audio-hal-aidl" >/dev/null 2>&1
+    fi
+    if [ -n "$(getprop init.svc.audiohalservice.qti)" ]; then
+        setprop ctl.restart "audiohalservice.qti" >/dev/null 2>&1
+    fi
+    if [ -n "$(getprop init.svc.audiohalservice)" ]; then
+        setprop ctl.restart "audiohalservice" >/dev/null 2>&1
+    fi
+    if [ -n "$(getprop init.svc.vendor.audio-hal)" ]; then
+        setprop ctl.restart "vendor.audio-hal" >/dev/null 2>&1
+    fi
+
+    # Restart AudioFlinger / Audioserver
+    if [ -n "$(getprop init.svc.audioserver)" ]; then
+        setprop ctl.restart audioserver >/dev/null 2>&1
+        sleep 0.4
+        if [ "$(getprop init.svc.audioserver)" != "running" ]; then
+            pid="$(getprop init.svc_debug_pid.audioserver)"
+            [ -n "$pid" ] && kill -HUP "$pid" >/dev/null 2>&1
+        fi
+    fi
+}
+
 apply_tinymix_hw() {
     local target_mode="$1"
     if type tinymix >/dev/null 2>&1; then
-        # Apple USB DAC 100% Volume Override Fix
+        # Ensure USB DAC volume is unclamped
         tinymix "DAC Volume" "100%" >/dev/null 2>&1
         tinymix "Headphone Playback Volume" "100%" >/dev/null 2>&1
 
         if [ "$target_mode" = "audiophile" ]; then
-            # LOHIFI: High-bias mode to lower THD under load
+            # LOHIFI: High-bias mode for lowest distortion
             tinymix "RX_HPH_PWR_MODE" "LOHIFI" >/dev/null 2>&1
-            # Disable hardware dynamic range compression for transient integrity
             tinymix "WSA_COMP1 Switch" 0 >/dev/null 2>&1
             tinymix "WSA_COMP2 Switch" 0 >/dev/null 2>&1
-            # Reference analog gain for optimal SNR
-            tinymix "ADC1 Volume" 6 >/dev/null 2>&1
-            # Enable direct TDM routing where available
-            tinymix "MultiMedia1 Mixer PRI_TDM_RX_0" 1 >/dev/null 2>&1
         else
-            # ULP: Ultra-Low Power mode for battery savings
+            # ULP: Low power analog bias
             tinymix "RX_HPH_PWR_MODE" "ULP" >/dev/null 2>&1
-            # Re-enable hardware compression for power efficiency
             tinymix "WSA_COMP1 Switch" 1 >/dev/null 2>&1
             tinymix "WSA_COMP2 Switch" 1 >/dev/null 2>&1
-            # Restore default attenuated gain
-            tinymix "ADC1 Volume" 4 >/dev/null 2>&1
-            # Disable direct TDM routing
-            tinymix "MultiMedia1 Mixer PRI_TDM_RX_0" 0 >/dev/null 2>&1
         fi
     fi
 }
@@ -111,106 +153,70 @@ if [ -z "$TARGET_MODE" ] || [ "$TARGET_MODE" = "apply" ]; then
     fi
 fi
 
-PREV_MODE=""
-if [ -r "$CONF_FILE" ]; then
-    PREV_MODE="$(grep '^MODE=' "$CONF_FILE" | cut -d= -f2 | tr -d ' \r')"
-fi
-PREV_DEEP="$(getprop audio.deep_buffer.media)"
-PREV_RESAMPLER="$(getprop af.resampler.quality)"
-
 case "$TARGET_MODE" in
     "power_saver" | "battery" | "saver" )
         TARGET_MODE="power_saver"
 
-        # Deep buffer: re-enable for 200ms CPU sleep cycles between audio bursts
-        set_prop "audio.deep_buffer.media" "true"
+        # Safe power-optimized buffer: 12ms ADM buffer allows CPU to sleep longer
+        set_prop "vendor.audio.adm.buffering.ms" "12"
 
-        # Larger ADM buffer: fewer CPU wakeups = less power draw
-        set_prop "vendor.audio.adm.buffering.ms" "10"
+        # Resampler quality must remain 7 (Float Polyphase) to avoid PCM_FLOAT assertion crash
+        set_prop "af.resampler.quality" "7"
 
-        # Disable HiFi hardware mode to reduce power consumption
-        set_prop "persist.vendor.audio.hifi" "false"
-        set_prop "persist.vendor.audio.hifi.int_codec" "false"
+        # Clean 120 dB stopband filter without high-frequency smearing
+        # (tbwcheat=0 eliminates passband distortion on fractional 44.1k -> 384k conversions)
+        set_prop "ro.audio.resampler.psd.stopband" "120"
+        set_prop "ro.audio.resampler.psd.halflength" "160"
+        set_prop "ro.audio.resampler.psd.tbwcheat" "0"
+        set_prop "ro.audio.resampler.psd.enable_at_samplerate" "48000"
 
-        # Mid-grade resampler: lower CPU usage than mastering quality
-        set_prop "af.resampler.quality" "4"
+        # Quick hardware standby: release audio clock and DAC power in 50ms when idle
+        set_prop "ro.audio.flinger_standbytime_ms" "50"
 
-        # Quick AudioFlinger standby: release hardware fast when idle
-        set_prop "ro.audio.flinger_standbytime_ms" "60"
-
-        # Enable 24-bit PCM offload so Hi-Res (96kHz/192kHz) tracks can play without choking
+        # Keep 24-bit stream support active so Apple Music Hi-Res lossless tracks never fail
         set_prop "audio.offload.pcm.24bit.enable" "true"
 
-        # Delete audiophile-specific PSD resampler props to reduce processing overhead
-        delete_prop "ro.audio.resampler.psd.enable_at_samplerate"
-        delete_prop "ro.audio.resampler.psd.stopband"
-        delete_prop "ro.audio.resampler.psd.halflength"
-        delete_prop "ro.audio.resampler.psd.tbwcheat"
+        # Ensure direct audio routing remains stable
+        set_prop "audio.deep_buffer.media" "false"
 
         apply_tinymix_hw "power_saver"
         ;;
     "audiophile" | * )
         TARGET_MODE="audiophile"
 
-        # Bypass deep buffer: force low-latency direct/primary output path
+        # Low-latency direct output path
         set_prop "audio.deep_buffer.media" "false"
 
-        # Conservative ADM jitter buffer (universal-safe across all SoCs)
+        # Conservative 6ms ADM jitter buffer
         set_prop "vendor.audio.adm.buffering.ms" "6"
 
-        # Enable HiFi hardware acceleration on supported SoCs
+        # Enable HiFi hardware acceleration
         set_prop "persist.vendor.audio.hifi" "true"
         set_prop "persist.vendor.audio.hifi.int_codec" "true"
 
-        # Mastering-grade sinc interpolation for AudioFlinger resampler
+        # Mastering-grade sinc interpolation (Quality 7)
         set_prop "af.resampler.quality" "7"
 
-        # PSD (Polyphase Sinc with Downsampling) resampler configuration
-        #   179 dB stop-band attenuation eliminates audible aliasing
+        # 179 dB stop-band attenuation eliminates audible aliasing
         set_prop "ro.audio.resampler.psd.stopband" "179"
-        #   Longer sinc filter kernel for maximum precision
         set_prop "ro.audio.resampler.psd.halflength" "480"
-        #   Disable transition-band shortcuts for clinical accuracy
         set_prop "ro.audio.resampler.psd.tbwcheat" "0"
-        #   Enable PSD resampler at all sample rates ≥ 48kHz
         set_prop "ro.audio.resampler.psd.enable_at_samplerate" "48000"
 
-        # Force HAL to accept 24-bit streams on offload paths
+        # Force HAL to accept 24/32-bit streams
         set_prop "audio.offload.pcm.24bit.enable" "true"
 
-        # Keep hardware path warm longer to reduce pop/click on playback resume
+        # Keep hardware path warm longer
         set_prop "ro.audio.flinger_standbytime_ms" "200"
 
         apply_tinymix_hw "audiophile"
         ;;
 esac
 
-# Save state
+# Save persistent state
 echo "MODE=${TARGET_MODE}" > "$CONF_FILE" 2>/dev/null
 
-# Restart audioserver if mode switched or if key properties changed
-RESTART_NEEDED=0
-if [ "$ACTION_ARG" = "audiophile" ] || [ "$ACTION_ARG" = "power_saver" ] || [ "$ACTION_ARG" = "battery" ] || [ "$ACTION_ARG" = "saver" ]; then
-    RESTART_NEEDED=1
-elif [ -n "$PREV_MODE" ] && [ "$PREV_MODE" != "$TARGET_MODE" ]; then
-    RESTART_NEEDED=1
-elif [ "$TARGET_MODE" = "audiophile" ] && [ "$PREV_DEEP" != "false" ]; then
-    RESTART_NEEDED=1
-elif [ "$TARGET_MODE" = "power_saver" ] && [ "$PREV_DEEP" != "true" ]; then
-    RESTART_NEEDED=1
-fi
-
-if [ "$RESTART_NEEDED" = "1" ]; then
-    if [ -n "$(getprop init.svc.audioserver)" ]; then
-        setprop ctl.restart audioserver
-        sleep 0.8
-        if [ "$(getprop init.svc.audioserver)" != "running" ]; then
-            pid="$(getprop init.svc_debug_pid.audioserver)"
-            if [ -n "$pid" ]; then
-                kill -HUP "$pid" >/dev/null 2>&1
-            fi
-        fi
-    fi
-fi
+# Cleanly reload audio subsystem without breaking active media sessions
+reloadAudioServers
 
 echo "{\"status\":\"success\",\"mode\":\"${TARGET_MODE}\",\"message\":\"Switched to ${TARGET_MODE} mode successfully\"}"

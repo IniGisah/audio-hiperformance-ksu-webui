@@ -22,13 +22,54 @@ if [ ! -f "$MODPATH/mode.conf" ]; then
 fi
 chmod 644 "$MODPATH/mode.conf"
 
-# Make patched ALSA utility and Tensor's offload libraries for "ro.audio.usb.period_us"
-makeLibraries
+if [ ! -f "$MODPATH/samplerate.conf" ]; then
+    cat <<'EOF' > "$MODPATH/samplerate.conf"
+RATE=44100
+DEPTH=32
+MODE=auto
+DRC=false
+PERIOD=2000
+EOF
+fi
+chmod 644 "$MODPATH/samplerate.conf"
+
+# Make patched ALSA utility and Tensor's offload libraries (96kHz lock cleared up to 768kHz)
+makeUnlockedLibraries
+patchPlatformConfig
 
 # Remove spatial audio flags, disable DRC, and inject bit-perfect profiles into audio policy configs
 deSpatializeAudioPolicyConfig "/vendor/etc/bluetooth_audio_policy_configuration_7_0.xml"
 disableDrcAudioPolicyConfig "/vendor/etc/audio_policy_configuration.xml"
 patchBitPerfectAudioPolicyConfig "/vendor/etc/usb_audio_policy_configuration.xml"
+
+# Install CLI command wrapper 'audiomisc' for Termux and terminal emulator users
+mkdir -p "$MODPATH/system/bin"
+cat <<'EOF' > "$MODPATH/system/bin/audiomisc"
+#!/system/bin/sh
+MODDIR="${0%/*}/../.."
+if [ -f "$MODDIR/action.sh" ]; then
+    exec sh "$MODDIR/action.sh" "$@"
+fi
+for p in "/data/adb/modules/audio-misc-settings-ksu-webui" \
+         "/data/adb/modules/audio-misc-settings" \
+         "/data/adb/ksu/modules/audio-misc-settings-ksu-webui" \
+         "/data/adb/ap/modules/audio-misc-settings-ksu-webui"; do
+    if [ -f "$p/action.sh" ]; then
+        exec sh "$p/action.sh" "$@"
+    fi
+done
+echo "Error: Audio Misc. Settings module not found."
+exit 1
+EOF
+chmod 755 "$MODPATH/system/bin/audiomisc"
+
+chmod 755 "$MODPATH/action.sh" 2>/dev/null
+chmod 755 "$MODPATH/set_audio_mode.sh" 2>/dev/null
+chmod 755 "$MODPATH/set_audio_samplerate.sh" 2>/dev/null
+chmod 755 "$MODPATH/get_audio_status.sh" 2>/dev/null
+chmod 755 "$MODPATH/service.sh" 2>/dev/null
+chmod 755 "$MODPATH/post-fs-data.sh" 2>/dev/null
+chmod 755 "$MODPATH/uninstall.sh" 2>/dev/null
 
 # Disable pre-installed Moto Dolby features and Wellbeing on Motorola devices only
 if [ "`getprop ro.product.manufacturer`" = "motorola" ]; then
